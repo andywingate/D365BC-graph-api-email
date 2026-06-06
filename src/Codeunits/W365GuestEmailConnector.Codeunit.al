@@ -48,18 +48,21 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure GetAccounts(var EmailAccount: Record "Email Account")
     var
         UserToken: Record "W365 User Email Token";
-        GraphSession: Codeunit "W365 Graph Session";
         AppReg: Record "W365 App Registration";
         UserName: Code[50];
         AccountNameLbl: Label 'Current User Email API', Locked = true;
-        NotConnectedLbl: Label '(not connected - complete Email Account setup)', Locked = true;
+        NotConnectedLbl: Label '(not connected)', Locked = true;
     begin
+        // Only surface the account once at least one App Registration has been configured.
+        // In a fresh company with no setup, nothing appears in Email Accounts.
+        if AppReg.IsEmpty() then
+            exit;
+
         EmailAccount.Init();
         EmailAccount."Account Id" := GetFixedAccountId();
         EmailAccount.Name := AccountNameLbl;
         EmailAccount.Connector := Enum::"Email Connector"::"W365 Guest Email";
 
-        // Resolve App Registration for this user to show their home email if available
         UserName := CopyStr(UserId(), 1, MaxStrLen(UserName));
         if UserToken.Get(UserName) and (UserToken."Home Email" <> '') then
             EmailAccount."Email Address" := CopyStr(UserToken."Home Email", 1, MaxStrLen(EmailAccount."Email Address"))
