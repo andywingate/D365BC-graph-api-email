@@ -95,10 +95,19 @@ page 50103 "W365 Email Setup Card"
                 RunObject = Page "W365 User Token List";
                 ToolTip = 'View the OAuth token status for all users and trigger the consent flow.';
             }
+            action(AppRegistrations)
+            {
+                ApplicationArea = All;
+                Caption = 'App Registrations';
+                Image = Setup;
+                RunObject = Page "W365 App Registrations";
+                ToolTip = 'Manage Entra app registrations for multi-domain routing.';
+            }
         }
         area(Promoted)
         {
             actionref(UserTokensRef; UserTokens) { }
+            actionref(AppRegistrationsRef; AppRegistrations) { }
         }
     }
 
