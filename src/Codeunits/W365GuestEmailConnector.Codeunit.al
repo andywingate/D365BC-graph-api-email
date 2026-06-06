@@ -19,11 +19,11 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure Send(EmailMessage: Codeunit "Email Message"; AccountId: Guid)
     var
-        GraphSession: Codeunit "W365 Graph Session";
         AppReg: Record "W365 App Registration";
         User: Record User;
         Recipients: List of [Text];
         SenderUPN: Text;
+        HomeDomain: Text;
         GraphEndpoint: Text;
         GraphEndpointTpl: Label 'https://graph.microsoft.com/v1.0/users/%1/sendMail', Locked = true;
         NoRecipientsErr: Label 'The email message has no recipients.';
@@ -41,15 +41,15 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         if SenderUPN = '' then
             Error(NoUPNErr);
 
-        if not GraphSession.ResolveAppRegForCurrentUser(AppReg) then
+        // Resolve App Registration directly from table - no SingleInstance codeunit
+        HomeDomain := ResolveDomainFromEmail(User."Authentication Email");
+        if not AppReg.ResolveForDomain(HomeDomain) then
             Error(NoAppRegErr);
 
         GraphEndpoint := StrSubstNo(GraphEndpointTpl, SenderUPN);
 
         if not TrySend(EmailMessage, AppReg."Code", GraphEndpoint) then begin
             ErrorText := GetLastErrorText();
-            // Clear the cached client so next attempt rebuilds from scratch
-            GraphSession.ClearSession(AppReg."Code");
             Error('Failed to send email via Microsoft Graph: %1', ErrorText);
         end;
     end;
@@ -163,6 +163,33 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
             exit(Prefix);
         end;
         exit(AuthEmail);
+    end;
+
+    local procedure ResolveDomainFromEmail(AuthEmail: Text): Text
+    var
+        ExtPos: Integer;
+        UnderscorePos: Integer;
+        AtPos: Integer;
+        Prefix: Text;
+        i: Integer;
+    begin
+        if AuthEmail = '' then
+            exit('');
+        ExtPos := StrPos(AuthEmail, '#EXT#');
+        if ExtPos > 0 then begin
+            Prefix := CopyStr(AuthEmail, 1, ExtPos - 1);
+            UnderscorePos := 0;
+            for i := 1 to StrLen(Prefix) do
+                if Prefix[i] = '_' then
+                    UnderscorePos := i;
+            if UnderscorePos > 0 then
+                exit(CopyStr(Prefix, UnderscorePos + 1));
+            exit('');
+        end;
+        AtPos := StrPos(AuthEmail, '@');
+        if AtPos > 0 then
+            exit(CopyStr(AuthEmail, AtPos + 1));
+        exit('');
     end;
 
     /// <summary>
