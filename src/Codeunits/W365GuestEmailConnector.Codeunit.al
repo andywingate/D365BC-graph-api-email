@@ -47,25 +47,22 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure GetAccounts(var EmailAccount: Record "Email Account")
     var
         UserToken: Record "W365 User Email Token";
+        GraphSession: Codeunit "W365 Graph Session";
+        AppReg: Record "W365 App Registration";
         UserName: Code[50];
         AccountNameLbl: Label 'Current User Email API', Locked = true;
-        NotConnectedLbl: Label '(not connected - run Email Account Setup)', Locked = true;
+        NotConnectedLbl: Label '(not connected - complete Email Account setup)', Locked = true;
     begin
         EmailAccount.Init();
         EmailAccount."Account Id" := GetFixedAccountId();
         EmailAccount.Name := AccountNameLbl;
         EmailAccount.Connector := Enum::"Email Connector"::"W365 Guest Email";
 
-        // Show the current user's home email if they have an active token;
-        // otherwise show a placeholder so the account is still visible and
-        // can be set as default before users have individually consented.
+        // Resolve App Registration for this user to show their home email if available
         UserName := CopyStr(UserId(), 1, MaxStrLen(UserName));
-        if UserToken.Get(UserName) and (UserToken."Consent Status" = "W365 Consent Status"::Active) then begin
-            if UserToken."Home Email" <> '' then
-                EmailAccount."Email Address" := CopyStr(UserToken."Home Email", 1, MaxStrLen(EmailAccount."Email Address"))
-            else
-                EmailAccount."Email Address" := CopyStr(UserToken."User Name", 1, MaxStrLen(EmailAccount."Email Address"));
-        end else
+        if UserToken.Get(UserName) and (UserToken."Home Email" <> '') then
+            EmailAccount."Email Address" := CopyStr(UserToken."Home Email", 1, MaxStrLen(EmailAccount."Email Address"))
+        else
             EmailAccount."Email Address" := CopyStr(NotConnectedLbl, 1, MaxStrLen(EmailAccount."Email Address"));
 
         if EmailAccount.Insert() then;
@@ -89,8 +86,13 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// Opens the consent page for the relevant user.
     /// </summary>
     procedure ShowAccountInformation(AccountId: Guid)
+    var
+        AppReg: Record "W365 App Registration";
+        GraphSession: Codeunit "W365 Graph Session";
     begin
-        // No account information page - the Email Accounts list row is sufficient
+        // Open the App Registrations list so the admin can review setup
+        // The user's resolved registration is shown at the top
+        Page.Run(Page::"W365 App Registrations");
     end;
 
     /// <summary>
@@ -100,29 +102,21 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure RegisterAccount(var EmailAccount: Record "Email Account"): Boolean
     var
-        UserToken: Record "W365 User Email Token";
-        UserName: Code[50];
-        Setup: Record "W365 Email Setup";
-        NoSetupErr: Label 'W365 Email Setup has not been configured. Ask your administrator to complete the setup first.';
+        AppReg: Record "W365 App Registration";
+        NoAppRegErr: Label 'No App Registrations have been configured. Open App Registrations from the Email Account page and add at least one before completing setup.';
+        AccountNameLbl: Label 'Current User Email API', Locked = true;
     begin
-        if not Setup.Get('') then
-            Error(NoSetupErr);
-
-        Page.RunModal(Page::"W365 OAuth Consent");
-
-        // Check if consent was granted during the modal
-        UserName := CopyStr(UserId(), 1, MaxStrLen(UserName));
-        if not UserToken.Get(UserName) then
-            exit(false);
-        if UserToken."Consent Status" <> "W365 Consent Status"::Active then
-            exit(false);
+        // In Phase 3, consent happens inline at first send via SSO (Prompt Interaction::None).
+        // RegisterAccount just confirms at least one App Registration exists.
+        AppReg.SetRange("Is Default", true);
+        if not AppReg.FindFirst() then begin
+            AppReg.Reset();
+            if AppReg.IsEmpty() then
+                Error(NoAppRegErr);
+        end;
 
         EmailAccount."Account Id" := GetFixedAccountId();
-        if UserToken."Home Email" <> '' then
-            EmailAccount."Email Address" := CopyStr(UserToken."Home Email", 1, MaxStrLen(EmailAccount."Email Address"))
-        else
-            EmailAccount."Email Address" := CopyStr(UserToken."User Name", 1, MaxStrLen(EmailAccount."Email Address"));
-        EmailAccount.Name := 'Current User Email API';
+        EmailAccount.Name := AccountNameLbl;
         EmailAccount.Connector := Enum::"Email Connector"::"W365 Guest Email";
         exit(true);
     end;
@@ -132,12 +126,12 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure DeleteAccount(AccountId: Guid): Boolean
     var
-        OAuthMgt: Codeunit "W365 OAuth Mgt";
-        ConfirmMsg: Label 'This will disconnect the email account. The user will need to reconnect. Continue?';
+        GraphSession: Codeunit "W365 Graph Session";
+        ConfirmMsg: Label 'This will clear the cached session for your account. You will re-authenticate on next send. Continue?';
     begin
         if not Confirm(ConfirmMsg) then
             exit(false);
-        OAuthMgt.ClearTokens();
+        GraphSession.ClearAllSessions();
         exit(true);
     end;
 
