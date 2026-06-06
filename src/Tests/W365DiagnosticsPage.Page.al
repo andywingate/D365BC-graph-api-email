@@ -165,7 +165,7 @@ page 50149 "W365 Graph Diagnostics"
                     end;
 
                     // Find App Registration - no SingleInstance involved
-                    if TryResolveForDomain(AppReg, HomeDomain) then begin
+                    if AppReg.ResolveForDomain(HomeDomain) then begin
                         AppRegFound := AppReg."Code";
                         AppRegAppId := AppReg."App ID";
                         AppRegTenantId := AppReg."Tenant ID";
@@ -321,13 +321,6 @@ page 50149 "W365 Graph Diagnostics"
             actionref(DoStep3_Promoted; DoStep3) { }
         }
     }
-
-    [TryFunction]
-    local procedure TryResolveForDomain(var AppReg: Record "W365 App Registration"; Domain: Text)
-    begin
-        if not AppReg.ResolveForDomain(Domain) then
-            Error('');
-    end;
 
     [TryFunction]
     local procedure TryGet(var Client: Codeunit "Rest Client"; Url: Text; var Response: Codeunit "Http Response Message")
