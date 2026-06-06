@@ -311,8 +311,51 @@ Goal: forward attachments and all recipient addresses from `Email Message` to Gr
 ### Out of Scope for Phase 3
 
 - Reply, RetrieveEmails, MarkAsRead, GetEmailFolders (`Email Connector v4` interface stubs remain `not supported`)
-- AppSource publication (per-tenant only)
-- Multi-language translations
+- AppSource publication (per-tenant only - Phase 4)
+- Multi-language translations (Phase 4)
+
+---
+
+## Phase 4 - AppSource Publication *(planned)*
+
+Goal: take the app from a per-tenant extension to a published AppSource offering.
+
+### Prerequisites
+
+All Phase 3 sprints must be complete and tested before AppSource work begins. The app must send email reliably via both connectors (Current User and Shared Mailbox) across multiple home tenancies, with attachments and all recipients, before submission.
+
+### Key Requirements for AppSource
+
+| Area | Requirement |
+|---|---|
+| **Object naming** | All objects must have the registered object prefix - confirm `W365` prefix is registered with Microsoft for Wingate365 publisher |
+| **AppSourceCop** | Enable `AppSourceCop` in `app.json` and resolve all AppSource-level diagnostics (AS0001-AS0130+). Add `AppSourceCop.json` with `mandatoryAffixes` set to `["W365"]` |
+| **Translations** | All user-visible captions and error messages must be in `.xlf` translation files. English (en-US) baseline required as minimum for submission |
+| **Privacy + EULA** | `privacyStatement` and `EULA` URLs must be populated in `app.json` - these must point to publicly accessible pages |
+| **Help** | `help` URL in `app.json` must point to published documentation (GitHub Pages or equivalent) |
+| **Telemetry** | Add `LogMessage` telemetry calls for key events (consent completed, token refreshed, send succeeded, send failed) using a registered extension telemetry scope - required for AppSource supportability |
+| **Automated tests** | AppSource requires a test app. AL test codeunits covering the connector, OAuth flow (mocked), and Graph send (mocked) must be written and passing in a pipeline |
+| **Pipeline** | Azure DevOps or GitHub Actions CI pipeline running `AL: Compile`, `AppSourceCop`, and the test suite on every push to main |
+| **Dependency packaging** | The `Rest Client OAuth` dependency (AJ Kauffmann) must be available via a public feed or the partner must confirm AppSource submission path for a chained dependency |
+| **Partner Center** | Wingate365 publisher account in Partner Center, app listing with screenshots, short/long descriptions, support contact, and categorisation under Business Central > Operations > Email |
+
+### Sprint 4.1 - AppSourceCop Clean and Translation Baseline
+
+- Add `AppSourceCop.json`, enable cop, resolve all diagnostics
+- Extract all captions and error labels to `.xlf` - create `en-US` baseline
+- Populate `privacyStatement`, `EULA`, `help`, `url` in `app.json`
+
+### Sprint 4.2 - Automated Test Suite
+
+- Write AL test codeunits: connector registration, domain routing logic, Graph send (mocked HTTP), attachment size routing logic, shared mailbox account resolution
+- Set up GitHub Actions pipeline: compile + AppSourceCop + tests on push
+
+### Sprint 4.3 - Partner Center Submission
+
+- Register `W365` prefix (if not already confirmed)
+- Create app listing in Partner Center
+- Submit for validation
+- Iterate on any validation feedback
 
 ---
 
