@@ -215,15 +215,15 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     var
         AppReg: Record "W365 App Registration";
         AccountNameLbl: Label 'Current User (Microsoft Graph)', Locked = true;
-        NoDefaultErr: Label 'No App Registration is marked as Default. Open App Registrations, create or select one, and use Set as Default before completing setup.';
+        NoRegErr: Label 'No App Registration has been configured. Open App Registrations, create one with a valid Domain Filter, and save it before completing setup.';
     begin
         // Open App Registrations list so the admin can create/configure one without leaving the wizard.
         Page.RunModal(Page::"W365 App Registrations");
 
-        // After the list closes, verify at least one default exists.
-        AppReg.SetRange("Is Default", true);
+        // After the list closes, verify at least one registration with a domain filter exists.
+        AppReg.SetFilter("Domain Filter", '<>%1', '');
         if not AppReg.FindFirst() then
-            Error(NoDefaultErr);
+            Error(NoRegErr);
 
         EmailAccount."Account Id" := GetFixedAccountId();
         EmailAccount.Name := AccountNameLbl;
