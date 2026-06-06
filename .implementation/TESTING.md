@@ -1,15 +1,139 @@
 # Testing Guide
 
-Manual sandbox test paths for the Graph API Emailing extension. Each path covers a specific scenario and includes the expected outcome.
+Manual sandbox test paths for the Graph API Emailing extension.
 
 ## Pre-test Checklist
 
-Before running any paths, confirm:
+- Extension deployed to sandbox
+- App Registration created in Azure portal with `Mail.Send` application permission and admin consent granted
+- App Registration configured in BC (App Registrations list) with valid App ID, Tenant ID, Domain Filter, and client secret
+- Test user is a B2B guest (Authentication Email contains `#EXT#`)
 
-- Extension deployed to sandbox (F5 from VS Code)
-- Entra app registration exists with `Mail.Send` delegated permission and admin consent granted
-- A client secret value is available to paste
-- You have a guest user account (home-tenancy) available to sign in with during the consent flow
+---
+
+## Path 1 - App Registration Setup
+
+**Goal:** Confirm App Registration saves correctly and validates input.
+
+1. Open **Email Accounts**, select **Current User (Microsoft Graph)**, click the account to drill in
+2. Click **App Registrations** from the account card
+3. Click **New** - card opens
+4. Enter a Code (e.g. `VSG`) and Description
+5. Enter App (Client) ID as a valid GUID
+6. Enter Tenant ID
+7. Enter Domain Filter (e.g. `contoso.com`)
+8. Enter client secret in **Enter New Client Secret** and Tab out
+
+**Expected:**
+- Client Secret Status shows **Configured**
+- All fields persist on save
+
+**Validation tests:**
+- Enter a non-GUID in App (Client) ID and Tab out - error: "App (Client) ID must be a valid GUID"
+- Clear Domain Filter and attempt save - error: "Domain Filter is required"
+- Enter same Domain Filter as an existing registration - error: duplicate domain
+
+---
+
+## Path 2 - Test Connection
+
+**Goal:** Confirm Test Connection validates credentials against Microsoft Graph.
+
+1. Open the App Registration card for a correctly configured registration
+2. Click **Test Connection**
+
+**Expected (valid credentials):** Success dialog - "Connection successful."
+
+**Expected (invalid credentials):** Session crash ("Something went wrong") - this is BUG-004, a known limitation. The RestClientOAuth library raises uncatchable collectible errors on auth failure.
+
+---
+
+## Path 3 - Current User Email Send
+
+**Goal:** Confirm a B2B guest user can send email from their home-tenancy address.
+
+1. Sign in to BC as a guest user (Authentication Email contains `#EXT#`)
+2. Open **Email Accounts** - the account should show the decoded home email (e.g. `user@contoso.com`)
+3. Open any record with an email send action (e.g. Customer Card > Send Email)
+4. Compose an email and click **Send**
+
+**Expected:**
+- Email is delivered to the recipient
+- From address is the guest user's home-tenancy address (e.g. `user@contoso.com`), not the BC host tenant address
+- No session errors
+
+---
+
+## Path 4 - Current User Wizard Setup
+
+**Goal:** Confirm the Set Up Email wizard completes successfully.
+
+1. Open **Email Accounts** and click **New**
+2. Select **Current User (Microsoft Graph)** and click **Next**
+3. The App Registrations list opens - confirm at least one registration exists with a Domain Filter, then close the list
+4. Wizard advances to the completion screen
+
+**Expected:**
+- Wizard reaches "Congratulations" screen
+- Account Name shows "Current User (Microsoft Graph)"
+- Note: Email Address is blank on this screen (BUG-005, cosmetic) - it shows correctly on the Rate Limit page
+
+---
+
+## Path 5 - Attachments
+
+**Goal:** Confirm attachments are included in the sent email.
+
+1. Sign in as a guest user
+2. Compose an email and attach a file
+3. Send
+
+**Expected:** Email received with attachment intact.
+
+---
+
+## Path 6 - Shared Mailbox Send
+
+**Goal:** Confirm a shared mailbox account sends from the correct address.
+
+1. Open **Email Accounts** - confirm a Shared Mailbox account exists (e.g. `sales@contoso.com`)
+2. Compose an email selecting the shared mailbox as the From account
+3. Send
+
+**Expected:**
+- Email delivered to recipient
+- From address is the shared mailbox address
+- No session errors
+
+---
+
+## Path 7 - Shared Mailbox Setup
+
+**Goal:** Confirm shared mailbox accounts can be created and deleted.
+
+1. Open **Email Accounts**, click **New**
+2. Select **Shared Mailbox (Microsoft Graph)** and click **Next**
+3. The Shared Mailbox Accounts list opens - create a new entry with Display Name, Mailbox Email, and App Registration
+4. Close the list - wizard completes
+
+**Expected:** New account appears in Email Accounts list.
+
+**Delete test:**
+1. Select a Shared Mailbox account in Email Accounts
+2. Click **Delete Account** - confirmation prompt appears
+3. Confirm - account is removed, no session crash
+
+---
+
+## Path 8 - CC and BCC
+
+**Goal:** Confirm CC and BCC recipients are delivered correctly.
+
+1. Compose an email, click **Show more** to expand CC and BCC fields
+2. Add recipients to CC and BCC
+3. Send
+
+**Expected:** All recipients (To, CC, BCC) receive the email. BCC recipients are not visible to To/CC recipients.
 
 ---
 

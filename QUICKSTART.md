@@ -36,9 +36,10 @@ Create one app registration per user home domain (or one shared registration if 
 
 Under **API permissions > Add a permission > Microsoft Graph > Application permissions**, add:
 
-| **Permission** | **Type** |
-|---|---|
-| `Mail.Send` | Application |
+| **Permission** | **Type** | **Purpose** |
+|---|---|---|
+| `Mail.Send` | Application | Send email as any user in the tenant via `/users/{email}/sendMail` |
+| `Organization.Read.All` | Application | Used by Test Connection (`GET /organization`) to verify the token can reach Graph |
 
 Click **Grant admin consent for [tenant]** after adding it. The button must be clicked by a Global Administrator in that tenant.
 
@@ -97,8 +98,7 @@ In the **App Registrations** list:
 | Description | Friendly name, e.g. `Contoso home tenant` |
 | App (Client) ID | Application ID from the Azure portal |
 | Tenant ID | Directory ID from the Azure portal |
-| Domain Filter | The home email domain of users this registration covers, e.g. `contoso.com`. This value is required. |
-| Is Default | Optional marker field (not used by runtime routing in the current implementation) |
+| Domain Filter | The home email domain of users this registration covers, e.g. `contoso.com`. Required and must be unique across all registrations. |
 | Redirect URI | `https://businesscentral.dynamics.com/OAuthLanding.htm` |
 
 6. In the **Client Secret** section, paste the client secret value into **Enter New Client Secret** and press Tab or Enter. The value is stored encrypted and cannot be read back. **Client Secret Status** changes to **Configured**.

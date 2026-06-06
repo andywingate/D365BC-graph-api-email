@@ -1,4 +1,4 @@
-# D365BC Current User Email API - Project Plan
+# D365BC Graph API Emailing - Project Overview
 
 ## Problem Statement
 
@@ -13,9 +13,55 @@ The same problem applies to any user (guest or member) in a BC environment hoste
 
 ---
 
-## Goals
+## Solution
 
-- Every user - guest or member - sends email from BC using their own work address
+Two Email Connector implementations, sharing a common OAuth + App Registration stack:
+
+1. **Current User (Microsoft Graph)** - one logical account, every user sends from their own home-tenancy address. Connector resolves the user's home domain at send time, matches it to the correct App Registration, and calls `POST /v1.0/users/{email}/sendMail` via Client Credentials.
+
+2. **Shared Mailbox (Microsoft Graph)** - one account per shared mailbox. Admin registers each mailbox with a display name and email address, linked to an App Registration. Sends via `POST /v1.0/users/{mailbox}/sendMail`.
+
+Both connectors depend on **Rest Client OAuth** by AJ Kauffmann for token acquisition (Client Credentials flow, in-memory only - no persistent token storage).
+
+---
+
+## AL Objects
+
+| **ID** | **Object** | **Type** | **Purpose** |
+|---|---|---|---|
+| 50100 | `W365 Email Setup` | Table | Legacy Phase 1 setup table - retained but no longer primary setup path |
+| 50101 | `W365 User Email Token` | Table | Stores decoded home email per user for display |
+| 50103 | `W365 Email Setup Card` | Page | Legacy admin setup card |
+| 50104 | `W365 User Token List` | Page | Admin list of users and their decoded home email |
+| 50105 | `W365 Graph Mail Mgt` | Codeunit | Graph API calls - sendMail and connection test. Builds OAuth stack fresh inside each `[TryFunction]`. |
+| 50106 | `W365 OAuth Mgt` | Codeunit | Legacy Phase 1 OAuth helper - retained but unused in main flow |
+| 50109 | `W365 Guest Email` | PermissionSet | Access to all W365 objects |
+| 50110 | `W365 Guest Email Connector` | Codeunit | `Email Connector v4` implementation for Current User connector |
+| 50111 | `W365 App Registration` | Table | One row per Entra app registration. Domain Filter required and unique. Client secret in IsolatedStorage. |
+| 50112 | `W365 App Registrations` | Page | List page - admin setup entry point |
+| 50113 | `W365 App Registration Card` | Page | Card page - create/edit App Registration. GUID validation on App ID. Test Connection action. |
+| 50114 | `W365 Graph Session` | Codeunit | SingleInstance - caches Rest Client per App Reg. Safe for background use only, never called from TryFunction or user actions. |
+| 50115 | `W365 Shared Mailbox Account` | Table | One row per shared mailbox - display name, email, App Registration FK |
+| 50116 | `W365 Shared Mailbox Accounts` | Page | List page for shared mailboxes |
+| 50117 | `W365 Shared Mailbox Card` | Page | Card page for shared mailbox setup |
+| 50118 | `W365 Shared Mailbox Connector` | Codeunit | `Email Connector v4` implementation for Shared Mailbox connector |
+| 50149 | `W365 Graph Diagnostics` | Page | Dev tool - step-by-step pipeline diagnostic page |
+
+---
+
+## Key Technical Constraint
+
+RestClientOAuth raises errors via `ErrorInfo.Create(message, true)` - collectible errors that bypass `[TryFunction]` entirely. Every interactive code path (`Send()`, `TrySend()`, `TryPingGraph()`) must build the OAuth stack fresh inside the `[TryFunction]` boundary with no `SingleInstance` codeunit in the call chain.
+
+See README Lessons Learned for full detail.
+
+---
+
+## Open Items
+
+- BUG-004: Test Connection crashes with bad credentials (collectible errors uncatchable)
+- BUG-005: Email blank on wizard completion screen (cosmetic)
+
 - Admins configure once; no per-user admin action required after initial setup
 - Users complete a one-time OAuth consent; all subsequent sends are automatic
 - All BC send paths covered - compose dialog, customer statements, scheduled reports, background jobs, ISV extensions
