@@ -33,7 +33,7 @@ When any email is sent in BC - compose dialog, customer statements, scheduled re
        |
        | resolve user home domain from Authentication Email
        v
-[W365 App Registration]  <-- matched by Domain Filter, or Is Default fallback
+[W365 App Registration]  <-- matched by Domain Filter (required, unique per registration)
        |
        | Client Credentials (app-only auth, in-memory token cache)
        v
@@ -45,7 +45,7 @@ When any email is sent in BC - compose dialog, customer statements, scheduled re
 | **Component** | **Purpose** |
 |---|---|
 | `W365 Guest Email Connector` | Implements `Email Connector`, `Email Connector v4`, `Default Email Rate Limit`. `GetAccounts()` returns one fixed-GUID account. `Send()` resolves the user's home domain, selects the App Registration, and calls Graph using Client Credentials. All interactive paths build the OAuth stack fresh inside `[TryFunction]` - no `SingleInstance` codeunit in the call chain. |
-| `W365 App Registration` | Table storing one row per Entra app registration. Fields: Code (PK), Description, App ID, Tenant ID, Domain Filter, Is Default, Redirect URI, Client Secret Status. Client secret stored in `IsolatedStorage` keyed by App ID (`DataScope::Company`). |
+| `W365 App Registration` | Table storing one row per Entra app registration. Fields: Code (PK), Description, App ID, Tenant ID, Domain Filter, Redirect URI, Client Secret Status. Domain Filter is required and must be unique across registrations. Client secret stored in `IsolatedStorage` keyed by App ID (`DataScope::Company`). |
 | `W365 App Registrations` | List page. Entry point for admin setup - opened from the Email Account drill-in. |
 | `W365 App Registration Card` | Card page. Create or edit a single App Registration. Client secret is write-only (masked input, stored encrypted, never displayed). |
 | `W365 Graph Mail Mgt` | Calls `POST /v1.0/users/{email}/sendMail` and `GET /organization` (connection test). Builds the OAuth stack self-contained inside each `[TryFunction]`. |
@@ -71,14 +71,14 @@ See [QUICKSTART.md](QUICKSTART.md) for full step-by-step instructions. The short
 
 ## Intended use
 
-This extension is designed for BC environments where users belong to multiple home tenants - for example, a BC tenant hosted by a partner or shared services organisation where end-users sign in from their own company accounts (`user@contoso.com`, `user@fabrikam.com`, etc.). It also works where all users share a single home tenant; one App Registration with no Domain Filter (marked as Default) covers that case.
+This extension is designed for BC environments where users belong to multiple home tenants - for example, a BC tenant hosted by a partner or shared services organisation where end-users sign in from their own company accounts (`user@contoso.com`, `user@fabrikam.com`, etc.). It also works where all users share a single home tenant; one App Registration with the Domain Filter set to that tenant's domain covers that case.
 
 `Mail.Send` only. Reply, inbox retrieval, and folder management are not implemented.
 
 ## Known limitations
 
 - **`Mail.Send` application permission required** - the app registration must have `Mail.Send` granted as an application (not delegated) permission with admin consent in each home tenant's Azure portal. This means the registered app can technically send as any user in the tenant; it is the admin's responsibility to scope and audit this appropriately.
-- **One Domain Filter per App Registration** - each registration handles one home domain. Environments where users have multiple email domains that map to the same Entra app registration are not directly modelled; create separate registrations or use the Default fallback.
+- **One Domain Filter per App Registration** - Domain Filter is required and must be unique. Each registration handles exactly one home domain. Environments where users have multiple email domains that map to the same Entra app registration are not directly modelled; create separate registrations for each domain.
 - **Send-only** - Reply, inbox retrieval, and folder management are not implemented.
 
 ## Lessons Learned

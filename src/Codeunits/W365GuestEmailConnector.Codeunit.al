@@ -214,6 +214,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure RegisterAccount(var EmailAccount: Record "Email Account"): Boolean
     var
         AppReg: Record "W365 App Registration";
+        UserRec: Record User;
         AccountNameLbl: Label 'Current User (Microsoft Graph)', Locked = true;
         NoRegErr: Label 'No App Registration has been configured. Open App Registrations, create one with a valid Domain Filter, and save it before completing setup.';
     begin
@@ -228,6 +229,11 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         EmailAccount."Account Id" := GetFixedAccountId();
         EmailAccount.Name := AccountNameLbl;
         EmailAccount.Connector := Enum::"Email Connector"::"W365 Guest Email";
+
+        // Populate email address so the wizard completion screen shows it.
+        if UserRec.Get(UserSecurityId()) and (UserRec."Authentication Email" <> '') then
+            EmailAccount."Email Address" := CopyStr(ResolveHomeEmail(UserRec."Authentication Email"), 1, MaxStrLen(EmailAccount."Email Address"));
+
         exit(true);
     end;
 

@@ -1,5 +1,19 @@
 # Known Bugs
 
+## BUG-005 - Email address blank on wizard completion screen
+
+**Status**: Open
+**Severity**: Low
+**Affected**: Set Up Email wizard - final "Congratulations" page
+
+**Symptom**: The Email Address field on the wizard completion screen is blank. The same address displays correctly on the Rate Limit page and in the Email Accounts list.
+
+**Root cause**: `RegisterAccount()` sets `Account Id`, `Name`, and `Connector` on the returned `EmailAccount` record but does not set `EmailAddress`. The wizard completion page reads directly from that record before `GetAccounts()` populates it. Fix: call `ResolveHomeEmail()` inside `RegisterAccount()` and assign it to `EmailAccount."Email Address"`.
+
+**Impact**: Cosmetic only - email sends correctly, the address appears on all other screens.
+
+---
+
 ## BUG-004 - Test Connection crashes session on invalid credentials
 
 **Status**: Open  
@@ -18,15 +32,9 @@
 
 ---
 
-## BUG-001 - Domain routing: Is Default concept may cause ambiguity
+## BUG-001 - RESOLVED
 
-**Status**: Deferred  
-**Severity**: Medium  
-**Affected**: W365AppRegistration table, W365AppRegistrations list  
-
-**Symptom**: If no App Registration has a Domain Filter matching the current user's home domain, the fallback to Is Default may silently use the wrong registration. The Is Default toggle on the card is also confusing UX.  
-
-**Fix approach (when ready)**: Make Domain Filter mandatory (NotBlank). Remove Is Default concept - admin must explicitly set a domain filter per registration. Schema change requires care if sandbox has existing data.
+Domain Filter is now mandatory and must be unique per App Registration. Is Default concept removed from table logic, card page, and list page. `ResolveForDomain()` matches on Domain Filter only - no fallback. Fixed 2026-06-06.
 
 ---
 
