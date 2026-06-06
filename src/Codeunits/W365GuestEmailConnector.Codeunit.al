@@ -3,6 +3,7 @@ namespace Wingate365.GuestEmailAPI;
 using System.Email;
 using System.RestClient;
 using System.Security.AccessControl;
+using Microsoft.Identity.Client;
 
 codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email Connector v4", "Default Email Rate Limit"
 {
@@ -57,10 +58,38 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     local procedure TrySend(var EmailMessage: Codeunit "Email Message"; AppRegCode: Code[20]; GraphEndpoint: Text)
     var
         GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
-        GraphSession: Codeunit "W365 Graph Session";
+        AppReg: Record "W365 App Registration";
+        OAuthClientApp: Codeunit "OAuth Client Application KFM";
+        MicrosoftEntraID: Codeunit "Microsoft Entra ID KFM";
+        ClientCredFlow: Codeunit "Client Credentials Flow KFM";
+        HttpAuthOAuth2: Codeunit "Http Authentication OAuth2 KFM";
+        OAuthAuthority: Interface "OAuth Authority KFM";
+        OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
+        HttpAuthentication: Interface "Http Authentication";
         Client: Codeunit "Rest Client";
+        ClientSecret: Text;
+        ClientSecretAsSecret: SecretText;
+        NoSecretErr: Label 'No client secret is configured for App Registration %1.', Comment = '%1 = App Registration code';
     begin
-        GraphSession.GetRestClient(AppRegCode, Client);
+        // Build OAuth stack fresh inside TryFunction - no SingleInstance codeunit in this
+        // error path so any exception (including HTTP consent dialogs) is properly caught.
+        if not AppReg.Get(AppRegCode) then
+            Error('App Registration %1 not found.', AppRegCode);
+        if not AppReg.GetClientSecret(ClientSecret) then
+            Error(NoSecretErr, AppRegCode);
+
+        OAuthClientApp.SetClientId(AppReg."App ID");
+        ClientSecretAsSecret := ClientSecret;
+        OAuthClientApp.SetClientSecret(ClientSecretAsSecret);
+        OAuthClientApp.AddScope('https://graph.microsoft.com/.default');
+        MicrosoftEntraID.SetTenantID(AppReg.GetAuthorityTenant());
+        OAuthAuthority := MicrosoftEntraID;
+        ClientCredFlow.SetAuthority(OAuthAuthority);
+        OAuthAuthorizationFlow := ClientCredFlow;
+        HttpAuthOAuth2.Initialize(OAuthClientApp, OAuthAuthorizationFlow);
+        HttpAuthentication := HttpAuthOAuth2;
+        Client.Initialize(HttpAuthentication);
+
         GraphMailMgt.SendEmailMessage(EmailMessage, GraphEndpoint, Client);
     end;
 
@@ -181,10 +210,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure DeleteAccount(AccountId: Guid): Boolean
     var
         GraphSession: Codeunit "W365 Graph Session";
-        ConfirmMsg: Label 'This will clear the cached session for your account. You will re-authenticate on next send. Continue?';
     begin
-        if not Confirm(ConfirmMsg) then
-            exit(false);
         GraphSession.ClearAllSessions();
         exit(true);
     end;

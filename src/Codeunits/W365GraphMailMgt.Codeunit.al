@@ -155,7 +155,7 @@ codeunit 50105 "W365 Graph Mail Mgt"
         ThrottledErr: Label 'Microsoft Graph is throttling requests. Please wait a moment and try again.';
     begin
         JsonBody.WriteTo(BodyText);
-        HttpContentLocal := HttpContentLocal.Create(BodyText);
+        HttpContentLocal := HttpContentLocal.Create(BodyText, 'application/json');
         HttpResponseMessage := Client.Post(Endpoint, HttpContentLocal);
         StatusCode := HttpResponseMessage.GetHttpStatusCode();
         if StatusCode = 202 then
