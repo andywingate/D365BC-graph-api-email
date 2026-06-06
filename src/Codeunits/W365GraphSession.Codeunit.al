@@ -144,7 +144,8 @@ codeunit 50114 "W365 Graph Session"
 
     /// <summary>
     /// Resolves the App Registration for the current user based on their home email domain.
-    /// Returns the App Registration code.
+    /// Returns true and assigns the record to AppReg when a matching registration is found.
+    /// Returns false if the home domain cannot be detected or no matching registration exists.
     /// </summary>
     procedure ResolveAppRegForCurrentUser(var AppReg: Record "W365 App Registration"): Boolean
     var
