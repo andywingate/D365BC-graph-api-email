@@ -36,7 +36,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
 
         if not User.Get(UserSecurityId()) then
             Error(NoUPNErr);
-        SenderUPN := User."Authentication Email";
+        SenderUPN := ResolveHomeEmail(User."Authentication Email");
         if SenderUPN = '' then
             Error(NoUPNErr);
 
