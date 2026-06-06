@@ -52,25 +52,5 @@ page 50112 "W365 App Registrations"
 
     actions
     {
-        area(processing)
-        {
-            action(AddNew)
-            {
-                ApplicationArea = All;
-                Caption = 'New';
-                Image = New;
-                ToolTip = 'Opens a guided setup to enter App ID and Tenant ID, grant admin consent, then complete the App Registration details.';
-
-                trigger OnAction()
-                begin
-                    Page.RunModal(Page::"W365 App Reg Consent Wizard");
-                    CurrPage.Update(false);
-                end;
-            }
-        }
-        area(Promoted)
-        {
-            actionref(AddNew_Promoted; AddNew) { }
-        }
     }
 }
