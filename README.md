@@ -44,12 +44,12 @@ When any email is sent in BC - compose dialog, customer statements, scheduled re
 
 | **Component** | **Purpose** |
 |---|---|
-| `W365 Guest Email Connector` | Implements `Email Connector`, `Email Connector v4`, `Default Email Rate Limit`. `GetAccounts()` returns one fixed-GUID account. `Send()` resolves the user's home domain, selects the App Registration, and calls Graph using Client Credentials. All interactive paths build the OAuth stack fresh inside `[TryFunction]` - no `SingleInstance` codeunit in the call chain. |
-| `W365 App Registration` | Table storing one row per Entra app registration. Fields: Code (PK), Description, App ID, Tenant ID, Domain Filter, Redirect URI, Client Secret Status. Domain Filter is required and must be unique across registrations. Client secret stored in `IsolatedStorage` keyed by App ID (`DataScope::Company`). |
-| `W365 App Registrations` | List page. Entry point for admin setup - opened from the Email Account drill-in. |
-| `W365 App Registration Card` | Card page. Create or edit a single App Registration. Client secret is write-only (masked input, stored encrypted, never displayed). |
-| `W365 Graph Mail Mgt` | Calls `POST /v1.0/users/{email}/sendMail` and `GET /organization` (connection test). Builds the OAuth stack self-contained inside each `[TryFunction]`. |
-| `W365 Graph Session` | `SingleInstance` codeunit. Holds initialised `Rest Client` instances keyed by App Registration code for reuse across calls in one BC session. Used only outside `[TryFunction]` boundaries. |
+| `Guest Email Connector` | Implements `Email Connector`, `Email Connector v4`, `Default Email Rate Limit`. `GetAccounts()` returns one fixed-GUID account. `Send()` resolves the user's home domain, selects the App Registration, and calls Graph using Client Credentials. All interactive paths build the OAuth stack fresh inside `[TryFunction]` - no `SingleInstance` codeunit in the call chain. |
+| `App Registration` | Table storing one row per Entra app registration. Fields: Code (PK), Description, App ID, Tenant ID, Domain Filter, Redirect URI, Client Secret Status. Domain Filter is required and must be unique across registrations. Client secret stored in `IsolatedStorage` keyed by App ID (`DataScope::Company`). |
+| `App Registrations` | List page. Entry point for admin setup - opened from the Email Account drill-in. |
+| `App Registration Card` | Card page. Create or edit a single App Registration. Client secret is write-only (masked input, stored encrypted, never displayed). |
+| `Graph Mail Mgt` | Calls `POST /v1.0/users/{email}/sendMail` and `GET /organization` (connection test). Builds the OAuth stack self-contained inside each `[TryFunction]`. |
+| `Graph Session` | `SingleInstance` codeunit. Holds initialised `Rest Client` instances keyed by App Registration code for reuse across calls in one BC session. Used only outside `[TryFunction]` boundaries. |
 
 ### Auth model
 
