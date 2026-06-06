@@ -2,6 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 using System.Email;
 using System.RestClient;
+using Microsoft.Identity.Client;
 
 codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Email Connector v4", "Default Email Rate Limit"
 {
@@ -14,24 +15,60 @@ codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Em
     procedure Send(EmailMessage: Codeunit "Email Message"; AccountId: Guid)
     var
         SharedMailbox: Record "W365 Shared Mailbox Account";
-        AppReg: Record "W365 App Registration";
-        GraphSession: Codeunit "W365 Graph Session";
-        GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
-        Client: Codeunit "Rest Client";
         Recipients: List of [Text];
         NoRecipientsErr: Label 'The email message has no recipients.';
+        AccountNotFoundErr: Label 'Shared mailbox account not found for Account ID %1.', Comment = '%1 = account id';
     begin
         EmailMessage.GetRecipients(Enum::"Email Recipient Type"::"To", Recipients);
         if Recipients.Count() = 0 then
             Error(NoRecipientsErr);
 
         if not FindSharedMailboxByAccountId(AccountId, SharedMailbox) then
-            Error('Shared mailbox account not found for Account ID %1.', AccountId);
+            Error(AccountNotFoundErr, AccountId);
 
+        if not TrySend(EmailMessage, SharedMailbox) then
+            Error(GetLastErrorText());
+    end;
+
+    [TryFunction]
+    local procedure TrySend(var EmailMessage: Codeunit "Email Message"; var SharedMailbox: Record "W365 Shared Mailbox Account")
+    var
+        AppReg: Record "W365 App Registration";
+        OAuthClientApp: Codeunit "OAuth Client Application KFM";
+        MicrosoftEntraID: Codeunit "Microsoft Entra ID KFM";
+        ClientCredFlow: Codeunit "Client Credentials Flow KFM";
+        HttpAuthOAuth2: Codeunit "Http Authentication OAuth2 KFM";
+        OAuthAuthority: Interface "OAuth Authority KFM";
+        OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
+        HttpAuthentication: Interface "Http Authentication";
+        SendClient: Codeunit "Rest Client";
+        JsonBody: JsonObject;
+        HttpResponseMessage: Codeunit "Http Response Message";
+        HttpContentLocal: Codeunit "Http Content";
+        BodyText: Text;
+        ClientSecret: Text;
+        ClientSecretAsSecret: SecretText;
+        GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
+        NoSecretErr: Label 'No client secret configured for App Registration %1.', Comment = '%1 = code';
+    begin
         SharedMailbox.GetAppRegistration(AppReg);
-        GraphSession.GetRestClient(AppReg."Code", Client);
 
-        GraphMailMgt.SendEmailMessage(EmailMessage, SharedMailbox.GetSendMailEndpoint(), Client);
+        if not AppReg.GetClientSecret(ClientSecret) then
+            Error(NoSecretErr, AppReg."Code");
+
+        OAuthClientApp.SetClientId(AppReg."App ID");
+        ClientSecretAsSecret := ClientSecret;
+        OAuthClientApp.SetClientSecret(ClientSecretAsSecret);
+        OAuthClientApp.AddScope('https://graph.microsoft.com/.default');
+        MicrosoftEntraID.SetTenantID(AppReg.GetAuthorityTenant());
+        OAuthAuthority := MicrosoftEntraID;
+        ClientCredFlow.SetAuthority(OAuthAuthority);
+        OAuthAuthorizationFlow := ClientCredFlow;
+        HttpAuthOAuth2.Initialize(OAuthClientApp, OAuthAuthorizationFlow);
+        HttpAuthentication := HttpAuthOAuth2;
+        SendClient.Initialize(HttpAuthentication);
+
+        GraphMailMgt.SendEmailMessage(EmailMessage, SharedMailbox.GetSendMailEndpoint(), SendClient);
     end;
 
     procedure GetAccounts(var EmailAccount: Record "Email Account")
@@ -78,19 +115,14 @@ codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Em
     procedure DeleteAccount(AccountId: Guid): Boolean
     var
         SharedMailbox: Record "W365 Shared Mailbox Account";
-        GraphSession: Codeunit "W365 Graph Session";
-        AppReg: Record "W365 App Registration";
         ConfirmMsg: Label 'This will remove the shared mailbox account configuration. Continue?';
     begin
         if not Confirm(ConfirmMsg) then
             exit(false);
 
-        if FindSharedMailboxByAccountId(AccountId, SharedMailbox) then begin
-            // Clear the session cache for this app registration
-            SharedMailbox.GetAppRegistration(AppReg);
-            GraphSession.ClearSession(AppReg."Code");
+        if FindSharedMailboxByAccountId(AccountId, SharedMailbox) then
             SharedMailbox.Delete();
-        end;
+
         exit(true);
     end;
 
