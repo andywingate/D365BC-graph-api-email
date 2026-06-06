@@ -18,10 +18,8 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure Send(EmailMessage: Codeunit "Email Message"; AccountId: Guid)
     var
-        GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
         GraphSession: Codeunit "W365 Graph Session";
         AppReg: Record "W365 App Registration";
-        Client: Codeunit "Rest Client";
         User: Record User;
         Recipients: List of [Text];
         SenderUPN: Text;
@@ -30,13 +28,12 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         NoRecipientsErr: Label 'The email message has no recipients.';
         NoAppRegErr: Label 'No App Registration found for your account. Contact your administrator.';
         NoUPNErr: Label 'Your account does not have an Authentication Email address configured in Business Central. Contact your administrator.';
+        ErrorText: Text;
     begin
         EmailMessage.GetRecipients(Enum::"Email Recipient Type"::"To", Recipients);
         if Recipients.Count() = 0 then
             Error(NoRecipientsErr);
 
-        // Resolve the sender UPN - used in the /users/{UPN}/sendMail endpoint.
-        // Client Credentials (app-only) flow sends on behalf of the user via application permission.
         if not User.Get(UserSecurityId()) then
             Error(NoUPNErr);
         SenderUPN := User."Authentication Email";
@@ -45,9 +42,25 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
 
         if not GraphSession.ResolveAppRegForCurrentUser(AppReg) then
             Error(NoAppRegErr);
-        GraphSession.GetRestClient(AppReg."Code", Client);
 
         GraphEndpoint := StrSubstNo(GraphEndpointTpl, SenderUPN);
+
+        if not TrySend(EmailMessage, AppReg."Code", GraphEndpoint) then begin
+            ErrorText := GetLastErrorText();
+            // Clear the cached client so next attempt rebuilds from scratch
+            GraphSession.ClearSession(AppReg."Code");
+            Error('Failed to send email via Microsoft Graph: %1', ErrorText);
+        end;
+    end;
+
+    [TryFunction]
+    local procedure TrySend(var EmailMessage: Codeunit "Email Message"; AppRegCode: Code[20]; GraphEndpoint: Text)
+    var
+        GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
+        GraphSession: Codeunit "W365 Graph Session";
+        Client: Codeunit "Rest Client";
+    begin
+        GraphSession.GetRestClient(AppRegCode, Client);
         GraphMailMgt.SendEmailMessage(EmailMessage, GraphEndpoint, Client);
     end;
 
