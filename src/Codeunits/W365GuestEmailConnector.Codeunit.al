@@ -87,9 +87,9 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         EmailAccount.Name := AccountNameLbl;
         EmailAccount.Connector := Enum::"Email Connector"::"W365 Guest Email";
 
-        // Show the current user's actual email from their BC user record - no token needed.
+        // Show the current user's real home email - decoded from #EXT# UPN for guests.
         if User.Get(UserSecurityId()) and (User."Authentication Email" <> '') then
-            EmailAccount."Email Address" := CopyStr(User."Authentication Email", 1, MaxStrLen(EmailAccount."Email Address"));
+            EmailAccount."Email Address" := CopyStr(ResolveHomeEmail(User."Authentication Email"), 1, MaxStrLen(EmailAccount."Email Address"));
 
         if EmailAccount.Insert() then;
     end;
@@ -105,6 +105,35 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     begin
         Evaluate(AccountId, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890');
         exit(AccountId);
+    end;
+
+    /// <summary>
+    /// Decodes a BC Authentication Email to the user's real home email.
+    /// For B2B guests (alice_contoso.com#EXT#@host.onmicrosoft.com) returns alice@contoso.com.
+    /// For member accounts returns the value unchanged.
+    /// Pure text operation - no codeunit references, safe to call from GetAccounts.
+    /// </summary>
+    local procedure ResolveHomeEmail(AuthEmail: Text): Text
+    var
+        ExtPos: Integer;
+        UnderscorePos: Integer;
+        Prefix: Text;
+        i: Integer;
+    begin
+        if AuthEmail = '' then
+            exit('');
+        ExtPos := StrPos(AuthEmail, '#EXT#');
+        if ExtPos > 0 then begin
+            Prefix := CopyStr(AuthEmail, 1, ExtPos - 1);
+            UnderscorePos := 0;
+            for i := 1 to StrLen(Prefix) do
+                if Prefix[i] = '_' then
+                    UnderscorePos := i;
+            if UnderscorePos > 0 then
+                exit(CopyStr(Prefix, 1, UnderscorePos - 1) + '@' + CopyStr(Prefix, UnderscorePos + 1));
+            exit(Prefix);
+        end;
+        exit(AuthEmail);
     end;
 
     /// <summary>
