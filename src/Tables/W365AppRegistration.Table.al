@@ -73,13 +73,12 @@ table 50111 "W365 App Registration"
 
     /// <summary>
     /// Returns the App Registration that should be used for a given user email domain.
-    /// First tries an exact Domain Filter match; falls back to the default registration.
-    /// Errors if neither is found.
+    /// Returns true and assigns the matching record to Rec when an exact Domain Filter match is found.
+    /// Returns false if no match is found.
     /// </summary>
     procedure ResolveForDomain(HomeDomain: Text): Boolean
     var
         AppReg: Record "W365 App Registration";
-        NoRegistrationErr: Label 'No App Registration found for domain %1. Open App Registrations from the Email Account page and add one with Domain Filter set to %1.', Comment = '%1 = email domain';
     begin
         if HomeDomain = '' then
             exit(false);
@@ -90,7 +89,7 @@ table 50111 "W365 App Registration"
             exit(true);
         end;
 
-        Error(NoRegistrationErr, HomeDomain);
+        exit(false);
     end;
 
     /// <summary>
