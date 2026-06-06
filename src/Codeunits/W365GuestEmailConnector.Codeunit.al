@@ -22,19 +22,32 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         GraphSession: Codeunit "W365 Graph Session";
         AppReg: Record "W365 App Registration";
         Client: Codeunit "Rest Client";
+        User: Record User;
         Recipients: List of [Text];
-        GraphEndpoint: Label 'https://graph.microsoft.com/v1.0/me/sendMail', Locked = true;
+        SenderUPN: Text;
+        GraphEndpoint: Text;
+        GraphEndpointTpl: Label 'https://graph.microsoft.com/v1.0/users/%1/sendMail', Locked = true;
         NoRecipientsErr: Label 'The email message has no recipients.';
         NoAppRegErr: Label 'No App Registration found for your account. Contact your administrator.';
+        NoUPNErr: Label 'Your account does not have an Authentication Email address configured in Business Central. Contact your administrator.';
     begin
         EmailMessage.GetRecipients(Enum::"Email Recipient Type"::"To", Recipients);
         if Recipients.Count() = 0 then
             Error(NoRecipientsErr);
 
+        // Resolve the sender UPN - used in the /users/{UPN}/sendMail endpoint.
+        // Client Credentials (app-only) flow sends on behalf of the user via application permission.
+        if not User.Get(UserSecurityId()) then
+            Error(NoUPNErr);
+        SenderUPN := User."Authentication Email";
+        if SenderUPN = '' then
+            Error(NoUPNErr);
+
         if not GraphSession.ResolveAppRegForCurrentUser(AppReg) then
             Error(NoAppRegErr);
         GraphSession.GetRestClient(AppReg."Code", Client);
 
+        GraphEndpoint := StrSubstNo(GraphEndpointTpl, SenderUPN);
         GraphMailMgt.SendEmailMessage(EmailMessage, GraphEndpoint, Client);
     end;
 
@@ -47,11 +60,9 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure GetAccounts(var EmailAccount: Record "Email Account")
     var
-        UserToken: Record "W365 User Email Token";
         AppReg: Record "W365 App Registration";
-        UserName: Code[50];
+        User: Record User;
         AccountNameLbl: Label 'Current User (Microsoft Graph)', Locked = true;
-        NotConnectedLbl: Label '(not connected)', Locked = true;
     begin
         // Only surface the account once at least one App Registration has been configured.
         // In a fresh company with no setup, nothing appears in Email Accounts.
@@ -63,11 +74,9 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         EmailAccount.Name := AccountNameLbl;
         EmailAccount.Connector := Enum::"Email Connector"::"W365 Guest Email";
 
-        UserName := CopyStr(UserId(), 1, MaxStrLen(UserName));
-        if UserToken.Get(UserName) and (UserToken."Home Email" <> '') then
-            EmailAccount."Email Address" := CopyStr(UserToken."Home Email", 1, MaxStrLen(EmailAccount."Email Address"))
-        else
-            EmailAccount."Email Address" := CopyStr(NotConnectedLbl, 1, MaxStrLen(EmailAccount."Email Address"));
+        // Show the current user's actual email from their BC user record - no token needed.
+        if User.Get(UserSecurityId()) and (User."Authentication Email" <> '') then
+            EmailAccount."Email Address" := CopyStr(User."Authentication Email", 1, MaxStrLen(EmailAccount."Email Address"));
 
         if EmailAccount.Insert() then;
     end;

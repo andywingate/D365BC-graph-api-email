@@ -2,14 +2,14 @@ namespace Wingate365.GuestEmailAPI;
 
 using System.RestClient;
 using System.Security.AccessControl;
-using System.Security.Authentication;
 using Microsoft.Identity.Client;
 
 /// <summary>
 /// SingleInstance codeunit that holds initialised Rest Client instances for the BC session.
-/// One instance per App Registration code. First call in a session triggers the OAuth consent
-/// popup if needed; subsequent calls reuse the in-memory token.
-/// Tokens are held in SecretText inside AJ's library - never persisted to IsolatedStorage.
+/// Uses the Client Credentials (app-only) OAuth flow - runs fully server-side, no browser
+/// interaction required. The App Registration must have Mail.Send application permission
+/// granted in Azure. Tokens are cached in-memory by the RestClientOAuth library for the
+/// duration of their lifetime (typically 1 hour).
 /// </summary>
 codeunit 50114 "W365 Graph Session"
 {
@@ -28,7 +28,7 @@ codeunit 50114 "W365 Graph Session"
         AppReg: Record "W365 App Registration";
         OAuthClientApp: Codeunit "OAuth Client Application KFM";
         MicrosoftEntraID: Codeunit "Microsoft Entra ID KFM";
-        AuthCodeGrantFlow: Codeunit "Auth. Code Grant Flow KFM";
+        ClientCredFlow: Codeunit "Client Credentials Flow KFM";
         HttpAuthOAuth2: Codeunit "Http Authentication OAuth2 KFM";
         OAuthAuthority: Interface "OAuth Authority KFM";
         OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
@@ -49,27 +49,24 @@ codeunit 50114 "W365 Graph Session"
         if not AppReg.GetClientSecret(ClientSecret) then
             Error(NoSecretErr, AppRegCode);
 
-        // Build OAuth Client Application
+        // Build OAuth Client Application (client ID + secret + scope)
         OAuthClientApp.SetClientId(AppReg."App ID");
         ClientSecretAsSecret := ClientSecret;
         OAuthClientApp.SetClientSecret(ClientSecretAsSecret);
-        OAuthClientApp.SetRedirectUri(AppReg."Redirect URI");
-        OAuthClientApp.AddScope('https://graph.microsoft.com/Mail.Send');
+        OAuthClientApp.AddScope('https://graph.microsoft.com/.default');
 
-        // Authority - use registration tenant ID or 'common'
+        // Authority - tenant-specific (client credentials must use a specific tenant, not 'common')
         MicrosoftEntraID.SetTenantID(AppReg.GetAuthorityTenant());
         OAuthAuthority := MicrosoftEntraID;
 
-        // Auth Code Grant Flow - SSO-first (PromptInteraction::None tries silent first)
-        AuthCodeGrantFlow.SetAuthority(OAuthAuthority);
-        AuthCodeGrantFlow.SetPromptInteraction(Enum::"Prompt Interaction"::None);
-        OAuthAuthorizationFlow := AuthCodeGrantFlow;
+        // Client Credentials flow - fully server-side, no browser interaction required.
+        // Requires Mail.Send APPLICATION permission granted in Azure portal.
+        ClientCredFlow.SetAuthority(OAuthAuthority);
+        OAuthAuthorizationFlow := ClientCredFlow;
 
-        // Initialise Http Authentication
+        // Initialise Http Authentication and Rest Client
         HttpAuthOAuth2.Initialize(OAuthClientApp, OAuthAuthorizationFlow);
         HttpAuthentication := HttpAuthOAuth2;
-
-        // Initialise Rest Client with authentication
         NewClient.Initialize(HttpAuthentication);
 
         RestClients.Add(AppRegCode, NewClient);
