@@ -107,6 +107,26 @@ page 50113 "W365 App Registration Card"
                     CurrPage.Update(false);
                 end;
             }
+            action(TestConnection)
+            {
+                ApplicationArea = All;
+                Caption = 'Test Connection';
+                Image = TestReport;
+                ToolTip = 'Verifies that the App ID, Tenant ID, and Client Secret are valid by acquiring a token and calling Microsoft Graph.';
+
+                trigger OnAction()
+                var
+                    GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
+                    ErrorText: Text;
+                    SuccessMsg: Label 'Connection successful. Microsoft Graph authenticated correctly using the Client Credentials flow.';
+                    FailMsg: Label 'Connection failed: %1';
+                begin
+                    if GraphMailMgt.TestAppRegConnection(Rec."Code", ErrorText) then
+                        Message(SuccessMsg)
+                    else
+                        Message(FailMsg, ErrorText);
+                end;
+            }
             action(ClearClientSecret)
             {
                 ApplicationArea = All;
@@ -127,6 +147,7 @@ page 50113 "W365 App Registration Card"
         }
         area(Promoted)
         {
+            actionref(TestConnection_Promoted; TestConnection) { }
             actionref(SetAsDefault_Promoted; SetAsDefault) { }
             actionref(ClearClientSecret_Promoted; ClearClientSecret) { }
         }

@@ -2,6 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 using System.Email;
 using System.RestClient;
+using Microsoft.Identity.Client;
 
 codeunit 50105 "W365 Graph Mail Mgt"
 {
@@ -10,6 +11,66 @@ codeunit 50105 "W365 Graph Mail Mgt"
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Tests the App Registration credentials by acquiring a token and calling
+    /// GET /organization. Safe to call from page actions - error is caught and
+    /// returned in ErrorText rather than crashing the session.
+    /// </summary>
+    procedure TestAppRegConnection(AppRegCode: Code[20]; var ErrorText: Text): Boolean
+    var
+        GraphSession: Codeunit "W365 Graph Session";
+        HttpResponseMessage: Codeunit "Http Response Message";
+    begin
+        if not TryPingGraph(AppRegCode, HttpResponseMessage) then begin
+            ErrorText := GetLastErrorText();
+            GraphSession.ClearSession(AppRegCode);
+            exit(false);
+        end;
+        if HttpResponseMessage.GetHttpStatusCode() = 200 then
+            exit(true);
+        ErrorText := StrSubstNo('Microsoft Graph returned HTTP %1. Check the App ID, Tenant ID, Client Secret, and that Mail.Send application permission has admin consent.', HttpResponseMessage.GetHttpStatusCode());
+        GraphSession.ClearSession(AppRegCode);
+        exit(false);
+    end;
+
+    [TryFunction]
+    local procedure TryPingGraph(AppRegCode: Code[20]; var HttpResponseMessage: Codeunit "Http Response Message")
+    var
+        AppReg: Record "W365 App Registration";
+        OAuthClientApp: Codeunit "OAuth Client Application KFM";
+        MicrosoftEntraID: Codeunit "Microsoft Entra ID KFM";
+        ClientCredFlow: Codeunit "Client Credentials Flow KFM";
+        HttpAuthOAuth2: Codeunit "Http Authentication OAuth2 KFM";
+        OAuthAuthority: Interface "OAuth Authority KFM";
+        OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
+        HttpAuthentication: Interface "Http Authentication";
+        PingClient: Codeunit "Rest Client";
+        ClientSecret: Text;
+        ClientSecretAsSecret: SecretText;
+        OrgEndpoint: Label 'https://graph.microsoft.com/v1.0/organization?$select=id', Locked = true;
+        NoSecretErr: Label 'No client secret is configured for App Registration %1. Open the App Registration and set the client secret.', Comment = '%1 = App Registration code';
+    begin
+        // Build the OAuth stack fresh - no SingleInstance codeunit in this error path
+        // so any exception thrown by the OAuth library is properly caught by [TryFunction].
+        if not AppReg.Get(AppRegCode) then
+            Error('App Registration %1 not found.', AppRegCode);
+        if not AppReg.GetClientSecret(ClientSecret) then
+            Error(NoSecretErr, AppRegCode);
+
+        OAuthClientApp.SetClientId(AppReg."App ID");
+        ClientSecretAsSecret := ClientSecret;
+        OAuthClientApp.SetClientSecret(ClientSecretAsSecret);
+        OAuthClientApp.AddScope('https://graph.microsoft.com/.default');
+        MicrosoftEntraID.SetTenantID(AppReg.GetAuthorityTenant());
+        OAuthAuthority := MicrosoftEntraID;
+        ClientCredFlow.SetAuthority(OAuthAuthority);
+        OAuthAuthorizationFlow := ClientCredFlow;
+        HttpAuthOAuth2.Initialize(OAuthClientApp, OAuthAuthorizationFlow);
+        HttpAuthentication := HttpAuthOAuth2;
+        PingClient.Initialize(HttpAuthentication);
+        HttpResponseMessage := PingClient.Get(OrgEndpoint);
+    end;
 
     procedure GetCurrentUserEmail(): Text
     var

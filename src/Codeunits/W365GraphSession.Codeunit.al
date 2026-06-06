@@ -143,6 +143,11 @@ codeunit 50114 "W365 Graph Session"
     end;
 
     /// <summary>
+    /// Tests connectivity to Microsoft Graph using the credentials in the given App Registration.
+    /// Makes a lightweight GET /organization call to verify the token can be acquired and the
+    /// app has access. Returns true on success; on failure sets ErrorText to the error message.
+    /// </summary>
+    /// <summary>
     /// Resolves the App Registration for the current user based on their home email domain.
     /// Returns the App Registration code.
     /// </summary>
@@ -152,5 +157,39 @@ codeunit 50114 "W365 Graph Session"
     begin
         HomeDomain := DetectHomeDomain();
         exit(AppReg.ResolveForDomain(HomeDomain));
+    end;
+
+    /// <summary>
+    /// Decodes a BC Authentication Email to the user's real home email address.
+    /// For B2B guests (format: alice_contoso.com#EXT#@host.onmicrosoft.com)
+    /// returns alice@contoso.com. For member accounts returns the value unchanged.
+    /// </summary>
+    procedure ResolveHomeEmail(AuthEmail: Text): Text
+    var
+        ExtPos: Integer;
+        UnderscorePos: Integer;
+        Prefix: Text;
+        i: Integer;
+    begin
+        if AuthEmail = '' then
+            exit('');
+
+        ExtPos := StrPos(AuthEmail, '#EXT#');
+        if ExtPos > 0 then begin
+            // Guest format: alice_contoso.com#EXT#@hosttenant.onmicrosoft.com
+            // Prefix before #EXT# is: alice_contoso.com
+            // Last underscore separates local part from home domain
+            Prefix := CopyStr(AuthEmail, 1, ExtPos - 1);
+            UnderscorePos := 0;
+            for i := 1 to StrLen(Prefix) do
+                if Prefix[i] = '_' then
+                    UnderscorePos := i;
+            if UnderscorePos > 0 then
+                exit(CopyStr(Prefix, 1, UnderscorePos - 1) + '@' + CopyStr(Prefix, UnderscorePos + 1));
+            exit(Prefix);
+        end;
+
+        // Member account - UPN is already their real email
+        exit(AuthEmail);
     end;
 }
