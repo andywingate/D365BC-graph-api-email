@@ -155,12 +155,15 @@ table 50111 "W365 App Registration"
 
     /// <summary>
     /// Returns the authority tenant to use in the OAuth URL.
-    /// Returns 'common' if Tenant ID is blank.
+    /// For Client Credentials, this must be a specific tenant.
     /// </summary>
     procedure GetAuthorityTenant(): Text
+    var
+        TenantRequiredErr: Label 'Tenant ID is required for Client Credentials authentication.';
     begin
-        if Rec."Tenant ID" <> '' then
-            exit(Rec."Tenant ID");
-        exit('common');
+        if Rec."Tenant ID" = '' then
+            Error(TenantRequiredErr);
+
+        exit(Rec."Tenant ID");
     end;
 }
