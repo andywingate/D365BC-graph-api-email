@@ -18,64 +18,139 @@ The result: guest users in BC either cannot send email, or their email arrives f
 
 This extension implements the **"Current User" pattern** for Microsoft Graph - one logical account, every user sends as themselves.
 
-A single email account called **Current User Email API** is registered with BC's email framework. An admin sets it as the system default **once**. After that, every user who completes a one-time OAuth consent flow can send email from BC using their own home-tenancy address - whether they are a guest (`user@partner.com`) or a member of the host tenant.
+A single email account called **Current User (Microsoft Graph)** is registered with BC's email framework. An admin sets it as the system default once and configures one or more Entra App Registrations (one per user home domain). After that, every send is fully automatic: the connector resolves the user's home domain from their BC identity at send time, selects the matching App Registration, and calls Graph using application-level (client credentials) authentication. No per-user consent flow, no token management per user, no admin action per send.
 
-When any email is sent in BC - compose dialog, customer statements, scheduled reports, background jobs, ISV extensions - the connector resolves the correct Graph token for the current user at send time using `UserSecurityId()`. No per-user account management, no routing flags, no admin action per user.
+When any email is sent in BC - compose dialog, customer statements, scheduled reports, background jobs, ISV extensions - the connector decodes the current user's identity, routes to the correct App Registration, and calls `POST /v1.0/users/{email}/sendMail` using client credentials with the app's `Mail.Send` application permission (not delegated).
 
 ## Architecture
 
 ```
 [BC Email Framework]
        |
-       | sets as default once
+       | default account set once
        v
-[Current User Email API]  <-- single fixed-GUID account
+[Current User (Microsoft Graph)]  <-- single fixed-GUID account
        |
-       | at send time, looks up token for UserSecurityId()
+       | resolve user home domain from Authentication Email
        v
-[W365 User Email Token]  <-- one row per user, DataScope::User
+[W365 App Registration]  <-- matched by Domain Filter (required, unique per registration)
        |
-       | calls Graph with delegated token
+       | Client Credentials (app-only auth, in-memory token cache)
        v
-[POST /v1.0/me/sendMail]  <-- sends as the user's home-tenancy identity
+[POST /v1.0/users/{email}/sendMail]  <-- sends as the user's home-tenancy identity
 ```
 
 ### Key components
 
-| Component | Purpose |
+| **Component** | **Purpose** |
 |---|---|
-| `W365 Guest Email Connector` | Implements `Email Connector`, `Email Connector v4`, `Default Email Rate Limit`. `GetAccounts()` returns one fixed-GUID account. `Send()` resolves the current user's token at runtime. |
-| `W365 OAuth Mgt` | Authorization Code + PKCE flow. Exchanges the auth code for access/refresh tokens and stores them in `IsolatedStorage` (per-user scope). Handles silent refresh before expiry. |
-| `W365 Graph Mail Mgt` | Calls `POST /v1.0/me/sendMail` and `GET /me` (to fetch the user's real home email address after consent). |
-| `W365 User Email Token` | One row per user. Stores consent status, token expiry, and the user's home email address. Keyed by `User Name`. |
-| `W365 OAuth Consent` page | The consent page users complete once. Opens a sign-in popup using PKCE; on return stores the token. |
-| `W365 Email Setup` | Admin-only setup card. Stores Entra App ID, Host Tenant ID, and Redirect URI. Client secret stored separately in `IsolatedStorage` (company scope). |
+| `W365 Guest Email Connector` | Implements `Email Connector`, `Email Connector v4`, `Default Email Rate Limit`. `GetAccounts()` returns one fixed-GUID account. `Send()` resolves the user's home domain, selects the App Registration, and calls Graph using Client Credentials. All interactive paths build the OAuth stack fresh inside `[TryFunction]` - no `SingleInstance` codeunit in the call chain. |
+| `W365 App Registration` | Table storing one row per Entra app registration. Fields: Code (PK), Description, App ID, Tenant ID, Domain Filter, Redirect URI, Client Secret Status. Domain Filter is required and must be unique across registrations. Client secret stored in `IsolatedStorage` keyed by App ID (`DataScope::Company`). |
+| `W365 App Registrations` | List page. Entry point for admin setup - opened from the Email Account drill-in. |
+| `W365 App Registration Card` | Card page. Create or edit a single App Registration. Client secret is write-only (masked input, stored encrypted, never displayed). |
+| `W365 Graph Mail Mgt` | Calls `POST /v1.0/users/{email}/sendMail` and `GET /organization` (connection test). Builds the OAuth stack self-contained inside each `[TryFunction]`. |
+| `W365 Graph Session` | `SingleInstance` codeunit. Holds initialised `Rest Client` instances keyed by App Registration code for reuse across calls in one BC session. Used only outside `[TryFunction]` boundaries. |
 
-### Token model
+### Auth model
 
-- Tokens are stored in `IsolatedStorage` with `DataScope::User` - each user's token is private to them and cannot be accessed by other users or by background tasks running as a different identity.
-- Access tokens are refreshed silently before expiry using the stored refresh token. Users do not need to re-consent unless they explicitly disconnect or the refresh token is revoked by an admin.
-- The `Home Email` field on `W365 User Email Token` stores the user's real address from `GET /me`, populated at consent time. This is what BC displays in the Email Accounts page and in the compose dialog "From" field.
+- Authentication uses the **Client Credentials (app-only)** flow from AJ Kauffmann's `Rest Client OAuth` library. No browser popup, no user interaction, no per-user token storage.
+- Tokens are held in memory by the `Rest Client` instance for the duration of the BC session (typically 1 hour). `W365 Graph Session` (SingleInstance) caches one `Rest Client` per App Registration so tokens are not re-acquired on every send.
+- All interactive code paths (`Send()`, `TrySend()`, `TryPingGraph()`) build the OAuth stack fresh inside a `[TryFunction]` boundary and do not reference `W365 Graph Session`. This prevents the SingleInstance/TryFunction/collectible-error crash described in Lessons Learned.
+- The `Home Email` field on `W365 User Email Token` caches the user's real home email decoded from their BC `Authentication Email`. It is used for the `From` display address in the Email Accounts page and compose dialog. No token data is stored there.
+- The Entra app must have `Mail.Send` granted as an **application permission** with admin consent. Delegated permissions are not used for sending.
 
 ## Setup
 
 See [QUICKSTART.md](QUICKSTART.md) for full step-by-step instructions. The short version:
 
-1. Create an Entra app registration with `Mail.Send` delegated permission
+1. Create one Entra app registration per user home domain, each with `Mail.Send` granted as an **application permission** with admin consent
 2. Deploy this extension to BC
-3. Open **W365 Email Setup** and enter the app registration details
-4. Open **Email Accounts**, find **Current User Email API**, and click **Set as Default**
-5. Each user opens the **Connect Current User Email API** page and completes the one-time consent popup
+3. Open **Email Accounts**, find **Current User (Microsoft Graph)**, and click **Set as Default**
+4. Open **App Registrations** from the account card and create one row per Entra app registration, including the Domain Filter (e.g. `contoso.com`) and client secret
+5. Sending is immediate - no per-user action required
 
 ## Intended use
 
-This extension is designed for BC environments where most or all users are Entra B2B guests - for example, a BC tenant hosted by a partner or shared services organisation where end-users sign in from their own company accounts. It also works for member accounts in the host tenant; the OAuth flow is the same regardless of guest status.
+This extension is designed for BC environments where users belong to multiple home tenants - for example, a BC tenant hosted by a partner or shared services organisation where end-users sign in from their own company accounts (`user@contoso.com`, `user@fabrikam.com`, etc.). It also works where all users share a single home tenant; one App Registration with the Domain Filter set to that tenant's domain covers that case.
 
-Phase 1 (this release) covers `Mail.Send` only. Reply, inbox retrieval, and folder management are not implemented.
+`Mail.Send` only. Reply, inbox retrieval, and folder management are not implemented.
 
 ## Known limitations
 
-- **Single app registration only** - `W365 Email Setup` stores one Entra App ID and one Host Tenant ID. All users must authenticate against the same app registration. Environments where users belong to multiple home tenants that each require a separate app registration are not supported in Phase 1. Multi-tenancy support (row-based setup with per-domain or per-tenant-ID registration selection) is planned for Phase 3.
+- **`Mail.Send` application permission required** - the app registration must have `Mail.Send` granted as an application (not delegated) permission with admin consent in each home tenant's Azure portal. This means the registered app can technically send as any user in the tenant; it is the admin's responsibility to scope and audit this appropriately.
+- **One Domain Filter per App Registration** - Domain Filter is required and must be unique. Each registration handles exactly one home domain. Environments where users have multiple email domains that map to the same Entra app registration are not directly modelled; create separate registrations for each domain.
+- **Send-only** - Reply, inbox retrieval, and folder management are not implemented.
+
+## Lessons Learned
+
+### SingleInstance Codeunits and TryFunction - a critical AL constraint
+
+The most significant technical lesson from this project: **`[TryFunction]` cannot reliably catch exceptions thrown from within, or triggered by, a `SingleInstance` codeunit**.
+
+#### The flawed approach
+
+The initial architecture used a `SingleInstance` codeunit (`W365 Graph Session`) to cache authenticated `Rest Client` instances per App Registration. The intent was to avoid re-acquiring a token on every send.
+
+When called from a `[TryFunction]`, any exception thrown by the RestClientOAuth library - including the BC outbound HTTP consent dialog appearing mid-call - would bypass the try/catch and crash the entire BC session with "Something went wrong". This affected every interactive action: sending email, testing the connection, even deleting the account.
+
+The key mistake: the RestClientOAuth library raises errors using `ErrorInfo.Create(message, true)` - the second parameter `true` marks the error as a **collectible error**. Collectible errors bypass `[TryFunction]` entirely, regardless of where the try boundary is placed. Combined with a `SingleInstance` codeunit in the call chain, the error had no way to be caught.
+
+Repeated attempts to fix this by wrapping calls in `[TryFunction]` at different levels all failed. The session kept crashing on first use.
+
+#### How it was diagnosed
+
+A dedicated **Graph API Diagnostics page** (`W365 Graph Diagnostics`) was built to isolate each step of the send pipeline:
+
+1. **Step 1** - resolve user identity and App Registration from the table directly (no codeunit calls)
+2. **Step 2** - build the OAuth stack fresh and call `GET /organization` to prove token acquisition
+3. **Step 3** - call `POST /users/{email}/sendMail` with a hardcoded JSON payload
+
+Step 1 ran without error. Step 2 revealed a second issue: `IsolatedStorage.Get` was returning false because the App ID used as the storage key had been entered incorrectly during testing (a stray character). Once the client secret was re-entered, Step 2 returned HTTP 200 from Graph. Step 3 returned HTTP 202 - the send pipeline was proven end-to-end in the diagnostic page before a single line of the connector was changed.
+
+#### The fix
+
+All interactive code paths - `Send()`, `TryPingGraph()`, `TrySend()` - were rewritten to be **completely self-contained**: they build the OAuth stack from scratch inside the `[TryFunction]` boundary with no `SingleInstance` codeunit in the call chain at all.
+
+```al
+// WRONG - SingleInstance in the try boundary, collectible errors bypass the catch
+[TryFunction]
+local procedure TrySend(...)
+var
+    GraphSession: Codeunit "W365 Graph Session";  // SingleInstance
+    Client: Codeunit "Rest Client";
+begin
+    GraphSession.GetRestClient(AppRegCode, Client);  // crash here is uncatchable
+    GraphMailMgt.SendEmailMessage(...);
+end;
+
+// CORRECT - self-contained, no SingleInstance in the call chain
+[TryFunction]
+local procedure TrySend(...)
+var
+    AppReg: Record "W365 App Registration";
+    OAuthClientApp: Codeunit "OAuth Client Application KFM";
+    // ... all OAuth codeunits declared locally ...
+    Client: Codeunit "Rest Client";
+begin
+    AppReg.Get(AppRegCode);
+    AppReg.GetClientSecret(ClientSecret);
+    // build OAuth stack fresh every call
+    OAuthClientApp.SetClientId(AppReg."App ID");
+    // ...
+    Client.Initialize(HttpAuthentication);
+    GraphMailMgt.SendEmailMessage(...);
+end;
+```
+
+The `SingleInstance` codeunit is still present in the codebase for cases where it is safe to use (background jobs, non-interactive server-side calls), but it is never called from within a `[TryFunction]` or from any user-triggered action.
+
+#### Rule of thumb
+
+> **Never call a `SingleInstance` codeunit from within a `[TryFunction]`, and never call one from any user-triggered action where an exception from a dependency library could surface.**
+
+If you need to cache something for performance, cache it in a non-SingleInstance codeunit and accept the per-request overhead during interactive operations. The BC session survival is more important than token cache efficiency.
+
+---
 
 ## Acknowledgements
 

@@ -181,7 +181,6 @@ codeunit 50106 "W365 OAuth Mgt"
 
         UserName := CopyStr(UserId(), 1, MaxStrLen(UserName));
         if UserToken.Get(UserName) then begin
-            UserToken."Consent Status" := "W365 Consent Status"::None;
             UserToken."Token Expiry" := 0DT;
             UserToken."Last Error" := '';
             UserToken.Modify();
@@ -319,7 +318,6 @@ codeunit 50106 "W365 OAuth Mgt"
             UserToken.Insert();
         end;
         UserToken."Token Expiry" := ExpiryDt;
-        UserToken."Consent Status" := "W365 Consent Status"::Active;
         UserToken."Last Error" := '';
 
         // Fetch real home email from Graph /me and store it for display
@@ -341,7 +339,6 @@ codeunit 50106 "W365 OAuth Mgt"
             UserToken."User Name" := UserName;
             UserToken.Insert();
         end;
-        UserToken."Consent Status" := "W365 Consent Status"::Error;
         UserToken."Last Error" := CopyStr(ErrorMessage, 1, MaxStrLen(UserToken."Last Error"));
         UserToken.Modify();
     end;

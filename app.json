@@ -2,15 +2,22 @@
   "id": "805e25dd-b6d1-4d42-b18c-1aa56f9e3b65",
   "name": "Graph API Emailing",
   "publisher": "Wingate365",
-  "version": "1.0.0.0",
-  "brief": "Every user - guest or member - sends email from BC using their own work address via Microsoft Graph.",
-  "description": "Open-source per-tenant extension. Guest users authorise once via OAuth 2.0 (Auth Code + PKCE). Subsequent email sends use their real home-tenancy identity transparently via the Microsoft Graph Mail.Send API. Member accounts are unaffected and continue using BC native email.",
+  "version": "2.0.0.0",
+  "brief": "B2B guest and member users send email from BC using their own work address via Microsoft Graph.",
+  "description": "Open-source per-tenant extension. Guest and member users send email from their real home-tenancy identity using Microsoft Graph Client Credentials flow. No per-user consent or token management required. Supports multiple home tenants via domain-matched App Registrations. Also supports shared mailboxes. Depends on Rest Client OAuth by AJ Kauffmann.",
   "privacyStatement": "",
   "EULA": "",
   "help": "",
   "url": "",
   "logo": "",
-  "dependencies": [],
+  "dependencies": [
+    {
+      "id": "19642efb-0a6e-4738-afc4-025f37856f4f",
+      "publisher": "AJ Kauffmann",
+      "name": "Rest Client OAuth",
+      "version": "1.0.0.0"
+    }
+  ],
   "screenshots": [],
   "platform": "1.0.0.0",
   "application": "27.0.0.0",

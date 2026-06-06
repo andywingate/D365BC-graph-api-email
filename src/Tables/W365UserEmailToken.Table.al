@@ -4,7 +4,7 @@ using System.Security.AccessControl;
 
 table 50101 "W365 User Email Token"
 {
-    Caption = 'W365 User Email Token';
+    Caption = 'User Email Token';
     DataClassification = EndUserIdentifiableInformation;
     DrillDownPageId = "W365 User Token List";
     LookupPageId = "W365 User Token List";
@@ -21,11 +21,6 @@ table 50101 "W365 User Email Token"
         field(2; "Token Expiry"; DateTime)
         {
             Caption = 'Token Expiry';
-            DataClassification = SystemMetadata;
-        }
-        field(3; "Consent Status"; Enum "W365 Consent Status")
-        {
-            Caption = 'Consent Status';
             DataClassification = SystemMetadata;
         }
         field(4; "Last Error"; Text[250])

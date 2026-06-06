@@ -2,193 +2,185 @@
 
 This guide covers everything needed to get the Graph API Emailing extension deployed and working in a Business Central sandbox or production environment.
 
+The extension provides two email connectors:
+
+- **Current User (Microsoft Graph)** - sends email from each user's own home-tenancy address. One logical account; the connector resolves the sender at runtime from the current user's BC identity.
+- **Shared Mailbox (Microsoft Graph)** - sends email from a configured shared mailbox. One account per mailbox, each linked to an App Registration.
+
+Both use the OAuth 2.0 Client Credentials (app-only) flow. No per-user consent steps are required.
+
 ## Prerequisites
 
 - Business Central 27 (SaaS or on-prem runtime 16.0+)
-- An Azure / Microsoft Entra app registration in your **host tenant** (the tenant that owns the BC environment)
-- Admin consent granted to the app registration for the `Mail.Send` delegated permission
+- An Azure / Microsoft Entra app registration in each **home tenant** whose users will send email (see Part 1)
+- `Mail.Send` granted as an **application permission** with admin consent on each app registration
 - The AL Language VS Code extension with access to download symbols for your BC environment
 
 ---
 
 ## Part 1 - Entra App Registration
 
-If you do not already have an app registration, create one in the [Azure portal](https://portal.azure.com) under **Microsoft Entra ID > App registrations**.
+Create one app registration per user home domain (or one shared registration if all users are in the same tenant). App registrations are created in the [Azure portal](https://portal.azure.com) under **Microsoft Entra ID > App registrations**.
+
+> **Which tenant?** Create the app registration in the **home tenant** of the users who will send email (e.g. `contoso.com`'s Entra ID, not the BC host tenant's Entra ID). The registration needs to be in the tenant that owns the mailboxes.
 
 ### Required settings
 
-| Setting | Value |
+| **Setting** | **Value** |
 |---|---|
-| Supported account types | **Multiple Entra ID tenants** |
-| Tenant restriction | **Allow only certain tenants** - then add each guest home tenant ID (see below) |
-| Platform | **Web** |
-| Redirect URI | `https://businesscentral.dynamics.com/OAuthLanding.htm` |
-
-> **Why "Allow only certain tenants"?** This is the safer option. You explicitly list the Tenant IDs of home organisations whose guest users are permitted to consent. Users from any other tenant are blocked by Entra ID even if they reach the sign-in page. If you later onboard guests from a new organisation, add their Tenant ID to the allowed list.
->
-> To find a home tenant's ID: ask the guest user to go to [portal.azure.com](https://portal.azure.com) and check **Microsoft Entra ID > Overview** - the **Tenant ID** is shown there. Alternatively it appears in the guest user's Authentication Email after `#EXT#@` - for example `user_contoso.com#EXT#@yourtenant.onmicrosoft.com` belongs to a guest whose home tenant you can look up via their domain.
->
-> To add allowed tenants: go to the app registration > **Authentication** > **Supported accounts** tab > **Manage allowed tenants** > add each Tenant ID.
+| Supported account types | **Accounts in this organizational directory only** (single tenant) |
+| Platform | Web (for the Redirect URI field) |
+| Redirect URI | `https://businesscentral.dynamics.com/OAuthLanding.htm` (not used for auth, but required by some Entra validation) |
 
 ### API permissions
 
-Add the following delegated permission under **API permissions > Microsoft Graph**:
+Under **API permissions > Add a permission > Microsoft Graph > Application permissions**, add:
 
-| Permission | Type |
+| **Permission** | **Type** |
 |---|---|
-| `Mail.Send` | Delegated |
+| `Mail.Send` | Application |
 
-Click **Grant admin consent** after adding it.
+Click **Grant admin consent for [tenant]** after adding it. The button must be clicked by a Global Administrator in that tenant.
+
+> **Why Application permission?** This connector uses Client Credentials (app-only) authentication. There is no signed-in user in the OAuth flow - the app authenticates as itself and sends on behalf of users via `/v1.0/users/{email}/sendMail`. This requires an Application permission with admin consent, not a Delegated permission.
+
+> **Security note:** `Mail.Send` application permission allows the app to send email as any user in the tenant. Limit who has access to the client secret and audit sends via Microsoft Purview / Exchange message trace.
 
 ### Client secret
 
-Under **Certificates & secrets**, create a new client secret. Copy the **Value** immediately - it is only shown once. Store it somewhere safe (e.g. a password manager) until you are ready to paste it into the BC setup page.
+Under **Certificates & secrets > Client secrets**, click **+ New client secret**. Copy the **Value** immediately - it is only shown once. Store it in a password manager until you paste it into BC.
 
-### Values you will need
+### Values to note down
 
-From the app registration **Overview** page, note:
+From the app registration **Overview** page:
 
 - **Application (Client) ID**
-- **Directory (Tenant) ID** of your host tenant
+- **Directory (Tenant) ID**
 
 ---
 
 ## Part 2 - Deploy the Extension
 
-1. Open the workspace `C:\Git\D365BC-graph-api-email` in VS Code
-2. Make sure your `launch.json` points to your target sandbox (tenant `Sandbox-Andy`)
+1. Open the workspace in VS Code
+2. Ensure your `launch.json` points to the target BC environment
 3. Press **F5** (or run **AL: Publish Without Debugging**) to compile and deploy
 4. Confirm the extension appears in BC under **Extension Management**
 
 ---
 
-## Part 3 - Admin Configuration in BC
+## Part 3 - Assign Permissions
 
-### 3a. Open the setup page
+Every user who needs to manage setup or who sends email via this connector needs the **Graph API Emailing** permission set.
 
-Search BC for **W365 Email Setup** and open the card.
-
-### 3b. Enter the Entra app details
-
-| Field | Value |
-|---|---|
-| App (Client) ID | The Application ID from your app registration |
-| Host Tenant ID | Your host tenant's Directory ID |
-| Redirect URI | `https://businesscentral.dynamics.com/OAuthLanding.htm` |
-
-### 3c. Store the client secret
-
-In the **Enter New Client Secret** field, paste the client secret value and press Tab or Enter. The field is masked and the value is stored encrypted in IsolatedStorage - it cannot be read back.
-
-The **Client Secret Status** field should change to **Configured**.
-
-### 3d. Assign permissions to guest users
-
-Each guest user needs the **W365 Guest Email** permission set before they can access the consent page.
-
-1. Search BC for **Users** and open the card for each guest user
+1. Search BC for **Users** and open each user's card
 2. Go to the **User Permission Sets** section
-3. Add a new line: **Permission Set** = `W365 GUEST EMAIL`
-4. Repeat for each guest user
-
-> Without this step, guest users will not see the **W365 - Authorise Email Access** page when they search BC.
+3. Add a row: **Permission Set** = `W365 GUEST EMAIL`
 
 ---
 
-## Part 4 - Admin: Set Default Email Account (one-time)
+## Part 4 - Create App Registrations in BC
 
-The extension registers **one** account called **Current User Email API** - the same "Current User" model used by BC's built-in connector. You set it as the system default once; every user's sends are then routed through their own Graph token automatically.
-
-1. Search BC for **Email Accounts**
-2. Select the **Current User Email API** row
-3. Click **Set as Default**
-4. Confirm
-
-That is all the admin configuration required. You do not need to create one account per user.
-
----
-
-## Part 5 - User Consent Flow (per user, one-time)
-
-> **This step must be completed by each user themselves.** Each user signs in to BC with their own account and completes the steps below. It cannot be done by an admin on their behalf - the consent grants a token tied to the individual's identity.
-
-There are two entry points for the consent flow - both open the same **Connect Current User Email API** page:
-
-### Option A - via Email Accounts (recommended)
+App Registrations in BC are the bridge between the extension and the Entra app registrations created in Part 1. Create one BC App Registration row for each Entra app registration.
 
 1. Search BC for **Email Accounts** and open the page
-2. Click **New** to open the **Set Up Email Account** wizard
-3. Select **Guest Email (Microsoft Graph)** from the account type list and click **Next**
-4. The **Connect Current User Email API** page opens - click **Connect my Email**
-5. A sign-in popup opens - sign in with your **home-tenancy work account** (e.g. `user@theircompany.com`) and click **Accept**
-6. The popup closes and the page shows **Connected**
-7. Click **Next** then **Finish** in the wizard
+2. Click **New > Set Up Email Account** and select **Current User (Microsoft Graph)** - this opens the **App Registrations** list
+3. Alternatively, if the account already exists, select it and click **View Details** > **App Registrations**
 
-### Option B - direct consent page
+In the **App Registrations** list:
 
-1. Search BC for **W365 User Token Status** (or use the **User Tokens** action from the W365 Email Setup Card)
-2. Click **Authorise (Consent Flow)** to open the **Connect Current User Email API** page
-3. Click **Connect my Email**
-4. A sign-in popup opens - sign in with your home-tenancy account and click **Accept**
-5. The popup closes and the page shows **Connected**
+4. Click **New** to open the **App Registration** card
+5. Fill in the fields:
 
-Tokens are refreshed automatically before they expire. Users should not need to repeat this process unless they explicitly disconnect or their refresh token is revoked.
+| **Field** | **Value** |
+|---|---|
+| Code | Short identifier, e.g. `CONTOSO` |
+| Description | Friendly name, e.g. `Contoso home tenant` |
+| App (Client) ID | Application ID from the Azure portal |
+| Tenant ID | Directory ID from the Azure portal |
+| Domain Filter | The home email domain of users this registration covers, e.g. `contoso.com`. This value is required. |
+| Is Default | Optional marker field (not used by runtime routing in the current implementation) |
+| Redirect URI | `https://businesscentral.dynamics.com/OAuthLanding.htm` |
+
+6. In the **Client Secret** section, paste the client secret value into **Enter New Client Secret** and press Tab or Enter. The value is stored encrypted and cannot be read back. **Client Secret Status** changes to **Configured**.
+
+7. Click **Test Connection** to verify the app registration can acquire a token from Graph. A success message confirms the setup.
+
+8. Repeat steps 4-7 for each additional home domain.
 
 ---
 
-## Part 6 - Verify with a Test Email
+## Part 5 - Configure Current User (Microsoft Graph)
 
-### Option A - via BC native Email (recommended)
+The **Current User (Microsoft Graph)** connector appears as a single account in Email Accounts once at least one App Registration exists.
 
 1. Search BC for **Email Accounts**
-2. Select the **Current User Email API** row and click **Send Test Email** from the action bar
-3. BC sends a test message using the connector - the recipient receives an email **from your home-tenancy address**
+2. Select **Current User (Microsoft Graph)** and click **Set as Default** if this should be the default account for all sends
+3. Click **Send Test Email** to confirm Graph accepts sends from the current user's identity
 
-### Option B - via the Connect Current User Email API page
+No per-user setup is required. Every user who sends from BC will automatically have their home domain matched to the correct App Registration at send time.
 
-1. Open the **Connect Current User Email API** page (search **W365 User Token Status** > **Authorise**)
-2. Scroll to **Test Email** and enter a recipient address
-3. Click **Send Test Email**
-4. The recipient should receive an email **from your home-tenancy address** (e.g. `user@theircompany.com`) - not from the BC host tenant
+### How domain matching works
+
+When a user sends an email, the connector:
+
+1. Reads the user's **Authentication Email** from their BC User record
+2. Decodes the home domain (B2B guest format `user_contoso.com#EXT#@host.onmicrosoft.com` becomes `contoso.com`; member format `user@contoso.com` becomes `contoso.com`)
+3. Finds the App Registration whose **Domain Filter** matches that domain
+4. Calls `POST /v1.0/users/{userEmail}/sendMail` using Client Credentials from that registration
 
 ---
 
-## Part 7 - Email Accounts Integration
+## Part 6 - Configure Shared Mailbox (Microsoft Graph)
 
-The extension registers itself as a native BC email connector. Once deployed, it appears as a single **Current User Email API** account alongside Microsoft 365, SMTP, and Current User on the **Email Accounts** page.
+The **Shared Mailbox (Microsoft Graph)** connector supports one or more shared mailboxes. Each mailbox is a separate Email Account in BC, linked to an App Registration.
 
-### How it works
+> **Entra setup required:** The App Registration used for a shared mailbox must also have `Mail.Send` application permission with admin consent in the tenant that owns the mailbox. You can reuse an App Registration created in Part 1 if it is in the correct tenant.
 
-This connector follows the same "Current User" model as BC's built-in connector: there is **one** logical account in the system. When any email is sent - compose dialog, customer statements, background jobs, ISV extensions - BC invokes this connector and it resolves the sending credentials from the current user's stored OAuth token automatically. Each user sends as themselves.
+### Create a shared mailbox account
 
-### What this gives you out of the box
+1. Search BC for **Email Accounts** and click **New > Set Up Email Account**
+2. Select **Shared Mailbox (Microsoft Graph)** and click **Next** - the **Shared Mailbox Accounts** list opens
+3. Click **New** to open the **Shared Mailbox Account** card
+4. Fill in the fields:
 
-- One account to set as default - no per-user account management
-- Every send routes through the correct user's home-tenancy address automatically
-- BC's **Send Test Email** works directly from the accounts page
-- Email Scenarios can be assigned to the connector (e.g. route sales invoices through this account)
-- The **Set Up Email Account** wizard walks users through consent automatically
-- Works for background sends (customer statements, report scheduling, ISV extensions) - no compose dialog needed
+| **Field** | **Value** |
+|---|---|
+| Code | Short identifier, e.g. `SALES` |
+| Display Name | Name shown in Email Accounts, e.g. `Sales Mailbox` |
+| Mailbox Email | The SMTP address of the shared mailbox, e.g. `sales@contoso.com` |
+| App Registration | Select the App Registration from Part 4 that covers this mailbox's tenant |
+| Description | Optional free-text description |
 
-### Email Scenarios (optional)
+5. Close the card. Back in the **Shared Mailbox Accounts** list, the new mailbox appears.
+6. Close the list. The wizard returns to Email Accounts where the new account is now listed.
+7. Select the account and click **Send Test Email** to verify.
+
+### Assign to Email Scenarios (optional)
 
 1. Search BC for **Email Scenarios**
-2. Assign the **Current User Email API** account to any scenario
-3. BC will automatically use the current user's token when sending emails for those scenarios
+2. Assign the shared mailbox account to the relevant scenario (e.g. **Sales - Invoice** routes through `sales@contoso.com`)
+
+---
+
+## Part 7 - Email Scenarios
+
+Both connectors integrate fully with BC's Email Scenarios.
+
+1. Search BC for **Email Scenarios**
+2. Assign the **Current User (Microsoft Graph)** account as the default account for user-driven sends, or assign individual scenarios to whichever account is appropriate
+3. Assign shared mailbox accounts to automated scenarios (background jobs, scheduled reports) that should come from a fixed address
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Resolution |
+| **Symptom** | **Likely cause** | **Resolution** |
 |---|---|---|
-| "AADSTS50011: redirect URI does not match" | The OAuthLanding.htm redirect URI is not registered on the app | In Azure Portal, go to app registration > Authentication > **+ Add a platform** > **Web** > enter `https://businesscentral.dynamics.com/OAuthLanding.htm` > Save |
-| "AADSTS50194: not configured as a multi-tenant application" | App registration Supported account types is set to single tenant | In Azure Portal, go to the app registration > Authentication > Supported accounts tab > change to **Multiple Entra ID tenants**, select **Allow only certain tenants**, add the guest's home Tenant ID, and Save |
-| "W365 Email Setup has not been configured" | App ID / Tenant ID fields are empty | Complete Part 3 above |
-| "Client secret has not been configured" | Secret was not stored | Re-enter the secret in the Enter New Client Secret field |
-| "No authorisation code found in the redirect URL" | Partial URL pasted | Copy the entire browser address bar URL after consent redirect |
-| "Authorisation state mismatch" | Page was refreshed between Step 1 and Step 2 | Click Step 1 again to generate a new state and verifier, then repeat |
-| "Token request failed (error: invalid_client)" | Wrong client secret or App ID | Check the Entra app registration and re-enter the correct secret |
-| "Microsoft Graph rejected the authorisation token (401)" | Token expired and refresh failed | Use **Disconnect** on the consent page and re-authorise |
-| Send Test Email button is greyed out | No active token for this user | Complete the consent flow (Step 1 + Step 2) first |
-| Email arrives from wrong address | User is not a B2B guest (no `#EXT#` in Authentication Email) | Confirm the user was invited as an Entra B2B guest, not created as a member |
+| "No App Registration found for your account" | User's home domain has no matching Domain Filter | Create an App Registration with a Domain Filter matching the user's domain |
+| "No client secret is configured for App Registration" | Secret was not stored or was stored against a different App Registration | Open the App Registration card and re-enter the client secret |
+| "Microsoft Graph returned HTTP 401" | App ID, Tenant ID, or client secret is wrong; or admin consent has not been granted | Check the Azure portal - confirm the app registration exists in the correct tenant and `Mail.Send` application permission has admin consent. Re-enter the client secret. |
+| "Microsoft Graph returned HTTP 403" | Admin consent not granted | In Azure portal > app registration > API permissions, click **Grant admin consent** |
+| "Microsoft Graph returned HTTP 404 on sendMail" | User's Authentication Email is empty or malformed in BC | Check the user's BC record: **Users** > open user > **Authentication Email** must contain a valid email address |
+| Email arrives from wrong address | User's BC Authentication Email does not match their actual mailbox | Verify the user's **Authentication Email** in BC matches their home-tenancy email address |
+| Shared mailbox account does not appear in Email Accounts | No Shared Mailbox Account records exist | Complete Part 6 to create at least one shared mailbox account |
+| Test Connection fails with "invalid_client" | Wrong client secret | Delete and re-enter the client secret on the App Registration card |

@@ -2,7 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 page 50104 "W365 User Token List"
 {
-    Caption = 'W365 User Token Status';
+    Caption = 'User Token Status';
     PageType = List;
     SourceTable = "W365 User Email Token";
     UsageCategory = Administration;
@@ -22,12 +22,6 @@ page 50104 "W365 User Token List"
                     ApplicationArea = All;
                     ToolTip = 'The BC user name.';
                 }
-                field("Consent Status"; Rec."Consent Status")
-                {
-                    ApplicationArea = All;
-                    ToolTip = 'Current token status for this user.';
-                    StyleExpr = StatusStyle;
-                }
                 field("Token Expiry"; Rec."Token Expiry")
                 {
                     ApplicationArea = All;
@@ -37,6 +31,11 @@ page 50104 "W365 User Token List"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Last error recorded during token acquisition or refresh.';
+                }
+                field("Home Email"; Rec."Home Email")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'The home email address resolved from Microsoft Graph for this user.';
                 }
             }
         }
@@ -51,18 +50,6 @@ page 50104 "W365 User Token List"
     {
         area(processing)
         {
-            action(StartConsent)
-            {
-                ApplicationArea = All;
-                Caption = 'Authorise (Consent Flow)';
-                Image = Setup;
-                ToolTip = 'Open the OAuth consent page for the current user to grant Mail.Send access.';
-
-                trigger OnAction()
-                begin
-                    Page.Run(Page::"W365 OAuth Consent");
-                end;
-            }
             action(ClearToken)
             {
                 ApplicationArea = All;
@@ -84,38 +71,18 @@ page 50104 "W365 User Token List"
         }
         area(navigation)
         {
-            action(EmailSetup)
+            action(AppRegistrations)
             {
                 ApplicationArea = All;
-                Caption = 'Email Setup';
+                Caption = 'App Registrations';
                 Image = Setup;
-                RunObject = Page "W365 Email Setup Card";
-                ToolTip = 'Open the W365 Email Setup card to configure the Entra app registration.';
+                RunObject = Page "W365 App Registrations";
+                ToolTip = 'View and manage the Entra app registrations.';
             }
         }
         area(Promoted)
         {
-            actionref(StartConsentRef; StartConsent) { }
+            actionref(ClearTokenRef; ClearToken) { }
         }
     }
-
-    trigger OnAfterGetRecord()
-    begin
-        SetStatusStyle();
-    end;
-
-    var
-        StatusStyle: Text;
-
-    local procedure SetStatusStyle()
-    begin
-        case Rec."Consent Status" of
-            "W365 Consent Status"::Active:
-                StatusStyle := 'Favorable';
-            "W365 Consent Status"::Error:
-                StatusStyle := 'Unfavorable';
-            else
-                StatusStyle := 'Subordinate';
-        end;
-    end;
 }

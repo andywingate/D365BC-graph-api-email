@@ -19,7 +19,7 @@ using System.Security.Authentication;
 /// </summary>
 page 50111 "W365 Auth Test"
 {
-    Caption = 'W365 Phase 3 Auth Test';
+    Caption = 'Phase 3 Auth Test';
     PageType = Card;
     UsageCategory = Administration;
     ApplicationArea = All;
