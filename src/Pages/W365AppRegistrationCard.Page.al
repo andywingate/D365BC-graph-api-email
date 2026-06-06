@@ -34,7 +34,18 @@ page 50113 "W365 App Registration Card"
                 field("App ID"; Rec."App ID")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'The Application (Client) ID from the Azure portal app registration overview.';
+                    ToolTip = 'The Application (Client) ID from the Azure portal app registration overview. Must be a GUID, e.g. deda566a-3ed3-4b8e-9238-e1eb3665c3f7.';
+
+                    trigger OnValidate()
+                    var
+                        NotGuidErr: Label 'App (Client) ID must be a valid GUID (e.g. deda566a-3ed3-4b8e-9238-e1eb3665c3f7). The value entered looks incorrect - check that browser autofill has not replaced this field.';
+                        ParsedGuid: Guid;
+                    begin
+                        if Rec."App ID" = '' then
+                            exit;
+                        if not Evaluate(ParsedGuid, Rec."App ID") then
+                            Error(NotGuidErr);
+                    end;
                 }
                 field("Tenant ID"; Rec."Tenant ID")
                 {
