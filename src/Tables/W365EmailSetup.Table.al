@@ -2,7 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 table 50100 "W365 Email Setup"
 {
-    Caption = 'W365 Email Setup';
+    Caption = 'Email Setup';
     DataClassification = SystemMetadata;
     DrillDownPageId = "W365 Email Setup Card";
     LookupPageId = "W365 Email Setup Card";

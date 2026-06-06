@@ -2,7 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 page 50104 "W365 User Token List"
 {
-    Caption = 'W365 User Token Status';
+    Caption = 'User Token Status';
     PageType = List;
     SourceTable = "W365 User Email Token";
     UsageCategory = Administration;

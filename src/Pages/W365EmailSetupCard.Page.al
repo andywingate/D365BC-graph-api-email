@@ -2,7 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 page 50103 "W365 Email Setup Card"
 {
-    Caption = 'W365 Email Setup';
+    Caption = 'Email Setup';
     PageType = Card;
     SourceTable = "W365 Email Setup";
     UsageCategory = Administration;

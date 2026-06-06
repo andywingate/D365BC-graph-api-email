@@ -2,7 +2,7 @@ namespace Wingate365.GuestEmailAPI;
 
 permissionset 50109 "W365 Guest Email"
 {
-    Caption = 'W365 Guest Email';
+    Caption = 'Graph API Emailing';
     Assignable = true;
 
     Permissions =

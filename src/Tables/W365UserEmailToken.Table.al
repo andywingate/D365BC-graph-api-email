@@ -4,7 +4,7 @@ using System.Security.AccessControl;
 
 table 50101 "W365 User Email Token"
 {
-    Caption = 'W365 User Email Token';
+    Caption = 'User Email Token';
     DataClassification = EndUserIdentifiableInformation;
     DrillDownPageId = "W365 User Token List";
     LookupPageId = "W365 User Token List";
