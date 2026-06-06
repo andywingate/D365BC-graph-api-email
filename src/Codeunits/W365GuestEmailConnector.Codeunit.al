@@ -50,7 +50,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         UserToken: Record "W365 User Email Token";
         AppReg: Record "W365 App Registration";
         UserName: Code[50];
-        AccountNameLbl: Label 'Current User Email API', Locked = true;
+        AccountNameLbl: Label 'Current User (Microsoft Graph)', Locked = true;
         NotConnectedLbl: Label '(not connected)', Locked = true;
     begin
         // Only surface the account once at least one App Registration has been configured.
@@ -107,7 +107,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure RegisterAccount(var EmailAccount: Record "Email Account"): Boolean
     var
         AppReg: Record "W365 App Registration";
-        AccountNameLbl: Label 'Current User Email API', Locked = true;
+        AccountNameLbl: Label 'Current User (Microsoft Graph)', Locked = true;
         NoDefaultErr: Label 'No App Registration is marked as Default. Open App Registrations, create or select one, and use Set as Default before completing setup.';
     begin
         // Open App Registrations list so the admin can create/configure one without leaving the wizard.
@@ -152,7 +152,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure GetDescription(): Text[250]
     begin
-        exit('Send emails from Business Central using your own work address via Microsoft Graph. One account - each user sends as themselves.');
+        exit('Send emails from Business Central via Microsoft Graph using each user''s own sign-in account. Ideal for guest and member users who need to send as themselves.');
     end;
 
     // =========================================================================
@@ -162,7 +162,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// <summary>Reply to an email. Not implemented - send-only connector.</summary>
     procedure Reply(var EmailMessage: Codeunit "Email Message"; AccountId: Guid)
     begin
-        Error('Reply is not supported by the Guest Email connector. Use Send instead.');
+        Error('Reply is not supported by the Current User (Microsoft Graph) connector. Use Send instead.');
     end;
 
     /// <summary>Retrieve emails from inbox. Not implemented - send-only connector.</summary>

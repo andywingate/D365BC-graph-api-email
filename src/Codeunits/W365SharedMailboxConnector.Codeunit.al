@@ -101,7 +101,7 @@ codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Em
 
     procedure GetDescription(): Text[250]
     begin
-        exit('Send emails from Business Central using a shared mailbox via Microsoft Graph. Multiple shared mailboxes can be configured independently.');
+        exit('Send emails from Business Central via Microsoft Graph using a shared mailbox. Ideal where a single team address is required regardless of which user triggers the send.');
     end;
 
     // =========================================================================
