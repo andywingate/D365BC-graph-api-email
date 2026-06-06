@@ -20,7 +20,7 @@ This extension implements the **"Current User" pattern** for Microsoft Graph - o
 
 A single email account called **Current User (Microsoft Graph)** is registered with BC's email framework. An admin sets it as the system default once and configures one or more Entra App Registrations (one per user home domain). After that, every send is fully automatic: the connector resolves the user's home domain from their BC identity at send time, selects the matching App Registration, and calls Graph using application-level (client credentials) authentication. No per-user consent flow, no token management per user, no admin action per send.
 
-When any email is sent in BC - compose dialog, customer statements, scheduled reports, background jobs, ISV extensions - the connector decodes the current user's identity, routes to the correct App Registration, and calls `POST /v1.0/users/{email}/sendMail` under the app's delegated-send permission.
+When any email is sent in BC - compose dialog, customer statements, scheduled reports, background jobs, ISV extensions - the connector decodes the current user's identity, routes to the correct App Registration, and calls `POST /v1.0/users/{email}/sendMail` under the app's `Mail.Send` application permission.
 
 ## Architecture
 

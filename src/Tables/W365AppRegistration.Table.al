@@ -35,6 +35,7 @@ table 50111 "W365 App Registration"
         {
             Caption = 'Domain Filter';
             DataClassification = SystemMetadata;
+            NotBlank = true;
             // Required. e.g. 'contoso.com'. Users whose home email domain matches this value
             // will authenticate using this registration. Must be unique across all registrations.
         }
@@ -119,7 +120,11 @@ table 50111 "W365 App Registration"
     var
         StorageKey: Text;
         ConfiguredLbl: Label 'Configured';
+        AppIdRequiredErr: Label 'App (Client) ID is required before storing a client secret.';
     begin
+        if Rec."App ID" = '' then
+            Error(AppIdRequiredErr);
+
         StorageKey := 'W365_CS_' + Rec."App ID";
         IsolatedStorage.Set(StorageKey, SecretValue, DataScope::Company);
         Rec."Client Secret Status" := ConfiguredLbl;

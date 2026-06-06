@@ -97,8 +97,8 @@ In the **App Registrations** list:
 | Description | Friendly name, e.g. `Contoso home tenant` |
 | App (Client) ID | Application ID from the Azure portal |
 | Tenant ID | Directory ID from the Azure portal |
-| Domain Filter | The home email domain of users this registration covers, e.g. `contoso.com`. Leave blank only on the Default registration. |
-| Is Default | Tick for one registration that acts as the fallback when no Domain Filter matches |
+| Domain Filter | The home email domain of users this registration covers, e.g. `contoso.com`. This value is required. |
+| Is Default | Optional marker field (not used by runtime routing in the current implementation) |
 | Redirect URI | `https://businesscentral.dynamics.com/OAuthLanding.htm` |
 
 6. In the **Client Secret** section, paste the client secret value into **Enter New Client Secret** and press Tab or Enter. The value is stored encrypted and cannot be read back. **Client Secret Status** changes to **Configured**.
@@ -126,8 +126,7 @@ When a user sends an email, the connector:
 1. Reads the user's **Authentication Email** from their BC User record
 2. Decodes the home domain (B2B guest format `user_contoso.com#EXT#@host.onmicrosoft.com` becomes `contoso.com`; member format `user@contoso.com` becomes `contoso.com`)
 3. Finds the App Registration whose **Domain Filter** matches that domain
-4. Falls back to the App Registration marked **Is Default** if no Domain Filter matches
-5. Calls `POST /v1.0/users/{userEmail}/sendMail` using Client Credentials from that registration
+4. Calls `POST /v1.0/users/{userEmail}/sendMail` using Client Credentials from that registration
 
 ---
 
@@ -177,12 +176,11 @@ Both connectors integrate fully with BC's Email Scenarios.
 
 | **Symptom** | **Likely cause** | **Resolution** |
 |---|---|---|
-| "No App Registration found for your account" | User's home domain has no matching Domain Filter and no Default registration | Create an App Registration with a Domain Filter matching the user's domain, or mark one registration as Default |
+| "No App Registration found for your account" | User's home domain has no matching Domain Filter | Create an App Registration with a Domain Filter matching the user's domain |
 | "No client secret is configured for App Registration" | Secret was not stored or was stored against a different App Registration | Open the App Registration card and re-enter the client secret |
 | "Microsoft Graph returned HTTP 401" | App ID, Tenant ID, or client secret is wrong; or admin consent has not been granted | Check the Azure portal - confirm the app registration exists in the correct tenant and `Mail.Send` application permission has admin consent. Re-enter the client secret. |
 | "Microsoft Graph returned HTTP 403" | Admin consent not granted | In Azure portal > app registration > API permissions, click **Grant admin consent** |
 | "Microsoft Graph returned HTTP 404 on sendMail" | User's Authentication Email is empty or malformed in BC | Check the user's BC record: **Users** > open user > **Authentication Email** must contain a valid email address |
-| "No App Registration is marked as Default" | Email Account wizard completed without a Default registration | Open App Registrations, select one row, and use **Set as Default** |
 | Email arrives from wrong address | User's BC Authentication Email does not match their actual mailbox | Verify the user's **Authentication Email** in BC matches their home-tenancy email address |
 | Shared mailbox account does not appear in Email Accounts | No Shared Mailbox Account records exist | Complete Part 6 to create at least one shared mailbox account |
 | Test Connection fails with "invalid_client" | Wrong client secret | Delete and re-enter the client secret on the App Registration card |

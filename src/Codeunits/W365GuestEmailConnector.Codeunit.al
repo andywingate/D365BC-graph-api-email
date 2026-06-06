@@ -14,7 +14,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     // =========================================================================
 
     /// <summary>
-    /// Sends an email via Microsoft Graph using the current user's delegated token.
+    /// Sends an email via Microsoft Graph using application credentials and the current user's resolved home address.
     /// Called by BC's Email module when sending any email assigned to this connector.
     /// </summary>
     procedure Send(EmailMessage: Codeunit "Email Message"; AccountId: Guid)
@@ -96,9 +96,9 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// <summary>
     /// Returns one account with a fixed well-known GUID - the same pattern as BC's built-in
     /// "Current User" connector. There is only ever one entry in Email Accounts; set it as
-    /// the system default once and every user's sends resolve to their own Graph token at
-    /// runtime via UserSecurityId(). The email address shown reflects the current user's
-    /// home address from their stored token, so each user sees their own address.
+    /// the system default once and every user's sends resolve to their own home email address
+    /// at runtime via UserSecurityId(). The email address shown reflects the current user's
+    /// decoded Authentication Email.
     /// </summary>
     procedure GetAccounts(var EmailAccount: Record "Email Account")
     var
@@ -298,7 +298,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     // =========================================================================
 
     /// <summary>
-    /// Graph delegated Mail.Send has no strict per-connector rate limit we need to enforce.
+    /// Graph Mail.Send application permission has no strict per-connector rate limit we need to enforce.
     /// Returning 0 means no limit imposed by this connector.
     /// </summary>
     procedure GetDefaultEmailRateLimit(): Integer

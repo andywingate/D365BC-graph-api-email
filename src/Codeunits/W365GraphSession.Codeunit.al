@@ -143,11 +143,6 @@ codeunit 50114 "W365 Graph Session"
     end;
 
     /// <summary>
-    /// Tests connectivity to Microsoft Graph using the credentials in the given App Registration.
-    /// Makes a lightweight GET /organization call to verify the token can be acquired and the
-    /// app has access. Returns true on success; on failure sets ErrorText to the error message.
-    /// </summary>
-    /// <summary>
     /// Resolves the App Registration for the current user based on their home email domain.
     /// Returns the App Registration code.
     /// </summary>

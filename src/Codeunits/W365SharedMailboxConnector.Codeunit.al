@@ -42,10 +42,6 @@ codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Em
         OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
         HttpAuthentication: Interface "Http Authentication";
         SendClient: Codeunit "Rest Client";
-        JsonBody: JsonObject;
-        HttpResponseMessage: Codeunit "Http Response Message";
-        HttpContentLocal: Codeunit "Http Content";
-        BodyText: Text;
         ClientSecret: Text;
         ClientSecretAsSecret: SecretText;
         GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
