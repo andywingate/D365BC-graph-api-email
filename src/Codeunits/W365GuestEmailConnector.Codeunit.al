@@ -152,7 +152,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure GetDescription(): Text[250]
     begin
-        exit('Send emails from Business Central via Microsoft Graph using each user''s own sign-in account. Ideal for guest and member users who need to send as themselves.');
+        exit('Send emails from Business Central via Microsoft Graph using each user''s own sign-in account. Ideal for B2B guest users or other multi-tenancy deployments.');
     end;
 
     // =========================================================================
