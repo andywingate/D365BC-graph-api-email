@@ -104,17 +104,16 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure RegisterAccount(var EmailAccount: Record "Email Account"): Boolean
     var
         AppReg: Record "W365 App Registration";
-        NoAppRegErr: Label 'No App Registrations have been configured. Open App Registrations from the Email Account page and add at least one before completing setup.';
         AccountNameLbl: Label 'Current User Email API', Locked = true;
+        NoDefaultErr: Label 'No App Registration is marked as Default. Open App Registrations, create or select one, and use Set as Default before completing setup.';
     begin
-        // In Phase 3, consent happens inline at first send via SSO (Prompt Interaction::None).
-        // RegisterAccount just confirms at least one App Registration exists.
+        // Open App Registrations list so the admin can create/configure one without leaving the wizard.
+        Page.RunModal(Page::"W365 App Registrations");
+
+        // After the list closes, verify at least one default exists.
         AppReg.SetRange("Is Default", true);
-        if not AppReg.FindFirst() then begin
-            AppReg.Reset();
-            if AppReg.IsEmpty() then
-                Error(NoAppRegErr);
-        end;
+        if not AppReg.FindFirst() then
+            Error(NoDefaultErr);
 
         EmailAccount."Account Id" := GetFixedAccountId();
         EmailAccount.Name := AccountNameLbl;
