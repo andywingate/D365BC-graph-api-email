@@ -12,7 +12,6 @@ permissionset 50109 "W365 Guest Email"
         tabledata "W365 Shared Mailbox Account" = RIMD,
         page "W365 Email Setup Card" = X,
         page "W365 User Token List" = X,
-        page "W365 OAuth Consent" = X,
         page "W365 App Registrations" = X,
         page "W365 App Registration Card" = X,
         page "W365 Shared Mailbox Accounts" = X,

@@ -1,5 +1,6 @@
 namespace Wingate365.GuestEmailAPI;
 
+using System.Email;
 using System.RestClient;
 
 codeunit 50105 "W365 Graph Mail Mgt"
@@ -40,6 +41,18 @@ codeunit 50105 "W365 Graph Mail Mgt"
     procedure SendEmail(ToAddress: Text; Subject: Text; BodyHtml: Text; BodyText: Text): Boolean
     begin
         exit(SendEmailInternal(ToAddress, Subject, BodyHtml, BodyText));
+    end;
+
+    /// <summary>
+    /// Full send - all recipients (To/Cc/Bcc) and attachments from the Email Message codeunit.
+    /// Called by the connector's Send() implementation for complete Email Connector v4 compliance.
+    /// </summary>
+    procedure SendEmailMessage(var EmailMessage: Codeunit "Email Message"; GraphEndpoint: Text; var Client: Codeunit "Rest Client"): Boolean
+    var
+        JsonBody: JsonObject;
+    begin
+        JsonBody := BuildSendMailJsonFromMessage(EmailMessage);
+        exit(ExecutePost(Client, GraphEndpoint, JsonBody));
     end;
 
     // -------------------------------------------------------------------------
@@ -125,6 +138,69 @@ codeunit 50105 "W365 Graph Mail Mgt"
         RootObj.Add('message', MsgObj);
         RootObj.Add('saveToSentItems', true);
         exit(RootObj);
+    end;
+
+    local procedure BuildSendMailJsonFromMessage(var EmailMessage: Codeunit "Email Message"): JsonObject
+    var
+        MsgObj: JsonObject;
+        BodyObj: JsonObject;
+        RootObj: JsonObject;
+        AttachmentsArr: JsonArray;
+        AttachmentObj: JsonObject;
+        AttachmentBase64: Text;
+        AttachmentName: Text[250];
+        AttachmentContentType: Text[250];
+    begin
+        BodyObj.Add('contentType', 'HTML');
+        BodyObj.Add('content', EmailMessage.GetBody());
+        MsgObj.Add('subject', EmailMessage.GetSubject());
+        MsgObj.Add('body', BodyObj);
+        MsgObj.Add('toRecipients', BuildRecipientsArray(EmailMessage, Enum::"Email Recipient Type"::"To"));
+        MsgObj.Add('ccRecipients', BuildRecipientsArray(EmailMessage, Enum::"Email Recipient Type"::"Cc"));
+        MsgObj.Add('bccRecipients', BuildRecipientsArray(EmailMessage, Enum::"Email Recipient Type"::"Bcc"));
+
+        // Inline attachments (base64 - suitable for attachments up to ~3MB per Graph API guidance)
+        if EmailMessage.Attachments_First() then
+            repeat
+                AttachmentBase64 := EmailMessage.Attachments_GetContentBase64();
+                AttachmentName := EmailMessage.Attachments_GetName();
+                AttachmentContentType := EmailMessage.Attachments_GetContentType();
+                Clear(AttachmentObj);
+                AttachmentObj.Add('@odata.type', '#microsoft.graph.fileAttachment');
+                AttachmentObj.Add('name', AttachmentName);
+                AttachmentObj.Add('contentType', AttachmentContentType);
+                AttachmentObj.Add('contentBytes', AttachmentBase64);
+                if EmailMessage.Attachments_IsInline() then begin
+                    AttachmentObj.Add('isInline', true);
+                    AttachmentObj.Add('contentId', EmailMessage.Attachments_GetContentId());
+                end else
+                    AttachmentObj.Add('isInline', false);
+                AttachmentsArr.Add(AttachmentObj);
+            until EmailMessage.Attachments_Next() = 0;
+        MsgObj.Add('attachments', AttachmentsArr);
+
+        RootObj.Add('message', MsgObj);
+        RootObj.Add('saveToSentItems', true);
+        exit(RootObj);
+    end;
+
+    local procedure BuildRecipientsArray(var EmailMessage: Codeunit "Email Message"; RecipientType: Enum "Email Recipient Type"): JsonArray
+    var
+        Recipients: List of [Text];
+        Address: Text;
+        RecipientObj: JsonObject;
+        EmailAddressObj: JsonObject;
+        RecipientsArr: JsonArray;
+    begin
+        EmailMessage.GetRecipients(RecipientType, Recipients);
+        foreach Address in Recipients do begin
+            Clear(EmailAddressObj);
+            Clear(RecipientObj);
+            EmailAddressObj.Add('address', Address);
+            RecipientObj.Add('emailAddress', EmailAddressObj);
+            RecipientsArr.Add(RecipientObj);
+        end;
+        exit(RecipientsArr);
     end;
 
     local procedure ParseAndRaiseGraphError(var HttpResponseMessage: Codeunit "Http Response Message"; StatusCode: Integer)

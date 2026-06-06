@@ -16,30 +16,22 @@ codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Em
         SharedMailbox: Record "W365 Shared Mailbox Account";
         AppReg: Record "W365 App Registration";
         GraphSession: Codeunit "W365 Graph Session";
+        GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
         Client: Codeunit "Rest Client";
         Recipients: List of [Text];
-        ToAddress: Text;
-        Subject: Text;
-        Body: Text;
-        JsonBody: JsonObject;
         NoRecipientsErr: Label 'The email message has no recipients.';
     begin
         EmailMessage.GetRecipients(Enum::"Email Recipient Type"::"To", Recipients);
         if Recipients.Count() = 0 then
             Error(NoRecipientsErr);
 
-        Recipients.Get(1, ToAddress);
-        Subject := EmailMessage.GetSubject();
-        Body := EmailMessage.GetBody();
-
-        // Resolve the shared mailbox account by the fixed SystemId-based AccountId
         if not FindSharedMailboxByAccountId(AccountId, SharedMailbox) then
             Error('Shared mailbox account not found for Account ID %1.', AccountId);
 
         SharedMailbox.GetAppRegistration(AppReg);
         GraphSession.GetRestClient(AppReg."Code", Client);
 
-        ExecuteSharedMailboxSend(Client, SharedMailbox.GetSendMailEndpoint(), ToAddress, Subject, Body);
+        GraphMailMgt.SendEmailMessage(EmailMessage, SharedMailbox.GetSendMailEndpoint(), Client);
     end;
 
     procedure GetAccounts(var EmailAccount: Record "Email Account")
@@ -153,69 +145,5 @@ codeunit 50118 "W365 Shared Mailbox Connector" implements "Email Connector", "Em
     begin
         SharedMailbox.Reset();
         exit(SharedMailbox.GetBySystemId(AccountId));
-    end;
-
-    local procedure ExecuteSharedMailboxSend(var Client: Codeunit "Rest Client"; Endpoint: Text; ToAddress: Text; Subject: Text; Body: Text)
-    var
-        HttpResponseMessage: Codeunit "Http Response Message";
-        HttpContentLocal: Codeunit "Http Content";
-        JsonBody: JsonObject;
-        JsonBodyText: Text;
-        MsgObj: JsonObject;
-        BodyObj: JsonObject;
-        RecipientsArr: JsonArray;
-        RecipientObj: JsonObject;
-        EmailAddressObj: JsonObject;
-        RootObj: JsonObject;
-        StatusCode: Integer;
-        ThrottledErr: Label 'Microsoft Graph is throttling requests. Please wait a moment and try again.';
-        ConnectErr: Label 'Could not reach Microsoft Graph. Check BC server outbound connectivity.';
-        ErrorCode: Text;
-        JsonObj: JsonObject;
-        JsonToken: JsonToken;
-        ErrorObj: JsonObject;
-        ResponseText: Text;
-        GenericErr: Label 'Microsoft Graph returned status %1 when sending from shared mailbox. Check the app registration has Mail.Send.Shared permission and the user has delegated access to the mailbox.';
-    begin
-        EmailAddressObj.Add('address', ToAddress);
-        RecipientObj.Add('emailAddress', EmailAddressObj);
-        RecipientsArr.Add(RecipientObj);
-        BodyObj.Add('contentType', 'HTML');
-        BodyObj.Add('content', Body);
-        MsgObj.Add('subject', Subject);
-        MsgObj.Add('body', BodyObj);
-        MsgObj.Add('toRecipients', RecipientsArr);
-        RootObj.Add('message', MsgObj);
-        RootObj.Add('saveToSentItems', true);
-
-        RootObj.WriteTo(JsonBodyText);
-        HttpContentLocal := HttpContentLocal.Create(JsonBodyText);
-        HttpResponseMessage := Client.Post(Endpoint, HttpContentLocal);
-
-        StatusCode := HttpResponseMessage.GetHttpStatusCode();
-
-        if StatusCode = 202 then
-            exit;
-
-        if StatusCode = 429 then
-            Error(ThrottledErr);
-
-        if StatusCode = 0 then
-            Error(ConnectErr);
-
-        // Parse error code from response
-        ResponseText := HttpResponseMessage.GetErrorMessage();
-        ErrorCode := '';
-        if JsonObj.ReadFrom(ResponseText) then
-            if JsonObj.Get('error', JsonToken) then begin
-                ErrorObj := JsonToken.AsObject();
-                if ErrorObj.Get('code', JsonToken) then
-                    ErrorCode := JsonToken.AsValue().AsText();
-            end;
-
-        if ErrorCode <> '' then
-            Error('Microsoft Graph error: %1 (HTTP %2).', ErrorCode, StatusCode)
-        else
-            Error(GenericErr, StatusCode);
     end;
 }

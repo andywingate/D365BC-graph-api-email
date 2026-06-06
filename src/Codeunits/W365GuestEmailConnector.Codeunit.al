@@ -1,6 +1,7 @@
 namespace Wingate365.GuestEmailAPI;
 
 using System.Email;
+using System.RestClient;
 using System.Security.AccessControl;
 
 codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email Connector v4", "Default Email Rate Limit"
@@ -18,23 +19,23 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     procedure Send(EmailMessage: Codeunit "Email Message"; AccountId: Guid)
     var
         GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
+        GraphSession: Codeunit "W365 Graph Session";
+        AppReg: Record "W365 App Registration";
+        Client: Codeunit "Rest Client";
         Recipients: List of [Text];
-        ToAddress: Text;
-        Subject: Text;
-        Body: Text;
+        GraphEndpoint: Label 'https://graph.microsoft.com/v1.0/me/sendMail', Locked = true;
         NoRecipientsErr: Label 'The email message has no recipients.';
+        NoAppRegErr: Label 'No App Registration found for your account. Contact your administrator.';
     begin
         EmailMessage.GetRecipients(Enum::"Email Recipient Type"::"To", Recipients);
         if Recipients.Count() = 0 then
             Error(NoRecipientsErr);
 
-        // Graph sendMail sends to all recipients; we pass the first To address.
-        // Full multi-recipient support is a Phase 2 enhancement.
-        Recipients.Get(1, ToAddress);
-        Subject := EmailMessage.GetSubject();
-        Body := EmailMessage.GetBody();
+        if not GraphSession.ResolveAppRegForCurrentUser(AppReg) then
+            Error(NoAppRegErr);
+        GraphSession.GetRestClient(AppReg."Code", Client);
 
-        GraphMailMgt.SendEmail(ToAddress, Subject, Body);
+        GraphMailMgt.SendEmailMessage(EmailMessage, GraphEndpoint, Client);
     end;
 
     /// <summary>

@@ -23,11 +23,6 @@ table 50101 "W365 User Email Token"
             Caption = 'Token Expiry';
             DataClassification = SystemMetadata;
         }
-        field(3; "Consent Status"; Enum "W365 Consent Status")
-        {
-            Caption = 'Consent Status';
-            DataClassification = SystemMetadata;
-        }
         field(4; "Last Error"; Text[250])
         {
             Caption = 'Last Error';
