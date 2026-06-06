@@ -54,22 +54,23 @@ page 50112 "W365 App Registrations"
     {
         area(processing)
         {
-            action(SetDefault)
+            action(AddNew)
             {
                 ApplicationArea = All;
-                Caption = 'Set as Default';
-                Image = Default;
-                ToolTip = 'Marks this registration as the fallback for users whose domain does not match any other registration.';
+                Caption = 'New';
+                Image = New;
+                ToolTip = 'Opens a guided setup to enter App ID and Tenant ID, grant admin consent, then complete the App Registration details.';
 
                 trigger OnAction()
                 begin
-                    Rec.SetAsDefault();
+                    Page.RunModal(Page::"W365 App Reg Consent Wizard");
+                    CurrPage.Update(false);
                 end;
             }
         }
         area(Promoted)
         {
-            actionref(SetDefault_Promoted; SetDefault) { }
+            actionref(AddNew_Promoted; AddNew) { }
         }
     }
 }
