@@ -236,10 +236,10 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure DeleteAccount(AccountId: Guid): Boolean
     var
-        GraphSession: Codeunit "W365 Graph Session";
+        CannotDeleteMsg: Label 'This account cannot be deleted. It is automatically available to all users based on the App Registration setup. To disable it, delete all App Registrations instead.';
     begin
-        GraphSession.ClearAllSessions();
-        exit(true);
+        Message(CannotDeleteMsg);
+        exit(false);
     end;
 
     /// <summary>
