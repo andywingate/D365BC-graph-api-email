@@ -39,12 +39,7 @@ page 50112 "W365 App Registrations"
                 field("Domain Filter"; Rec."Domain Filter")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Users whose home email domain matches this value will use this registration. Leave blank on the default.';
-                }
-                field("Is Default"; Rec."Is Default")
-                {
-                    ApplicationArea = All;
-                    ToolTip = 'The default registration is used when no domain filter matches.';
+                    ToolTip = 'Users whose home email domain matches this value will use this registration.';
                 }
                 field("Client Secret Status"; Rec."Client Secret Status")
                 {

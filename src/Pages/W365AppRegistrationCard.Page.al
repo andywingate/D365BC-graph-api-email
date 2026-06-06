@@ -26,12 +26,6 @@ page 50113 "W365 App Registration Card"
                     ApplicationArea = All;
                     ToolTip = 'Descriptive name for this registration.';
                 }
-                field("Is Default"; Rec."Is Default")
-                {
-                    ApplicationArea = All;
-                    Editable = false;
-                    ToolTip = 'The default registration is the fallback when no domain filter matches. Use Set as Default action to change this.';
-                }
             }
             group(EntraApp)
             {
@@ -55,7 +49,22 @@ page 50113 "W365 App Registration Card"
                 field("Domain Filter"; Rec."Domain Filter")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Users whose home email domain matches this value will authenticate using this registration. Example: contoso.com. Leave blank on the default registration.';
+                    ToolTip = 'The home email domain of users who will use this registration. Example: contoso.com. Must be unique across all registrations.';
+                    ShowMandatory = true;
+
+                    trigger OnValidate()
+                    var
+                        OtherReg: Record "W365 App Registration";
+                        DuplicateErr: Label 'Domain Filter %1 is already used by App Registration %2. Each registration must have a unique domain.', Comment = '%1 = domain, %2 = code';
+                        BlankErr: Label 'Domain Filter is required. Enter the home email domain for users of this registration (e.g. contoso.com).';
+                    begin
+                        if Rec."Domain Filter" = '' then
+                            Error(BlankErr);
+                        OtherReg.SetRange("Domain Filter", Rec."Domain Filter");
+                        OtherReg.SetFilter("Code", '<>%1', Rec."Code");
+                        if OtherReg.FindFirst() then
+                            Error(DuplicateErr, Rec."Domain Filter", OtherReg."Code");
+                    end;
                 }
             }
             group(ClientSecretGroup)
@@ -94,19 +103,6 @@ page 50113 "W365 App Registration Card"
     {
         area(processing)
         {
-            action(SetAsDefault)
-            {
-                ApplicationArea = All;
-                Caption = 'Set as Default';
-                Image = Default;
-                ToolTip = 'Makes this the fallback registration for users whose domain does not match any other.';
-
-                trigger OnAction()
-                begin
-                    Rec.SetAsDefault();
-                    CurrPage.Update(false);
-                end;
-            }
             action(TestConnection)
             {
                 ApplicationArea = All;
@@ -148,7 +144,6 @@ page 50113 "W365 App Registration Card"
         area(Promoted)
         {
             actionref(TestConnection_Promoted; TestConnection) { }
-            actionref(SetAsDefault_Promoted; SetAsDefault) { }
             actionref(ClearClientSecret_Promoted; ClearClientSecret) { }
         }
     }

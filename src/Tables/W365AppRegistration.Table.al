@@ -35,8 +35,8 @@ table 50111 "W365 App Registration"
         {
             Caption = 'Domain Filter';
             DataClassification = SystemMetadata;
-            // Optional. e.g. 'contoso.com'. Users whose home email domain matches this value
-            // will authenticate using this registration. Leave blank on the default registration.
+            // Required. e.g. 'contoso.com'. Users whose home email domain matches this value
+            // will authenticate using this registration. Must be unique across all registrations.
         }
         field(6; "Is Default"; Boolean)
         {
@@ -79,20 +79,12 @@ table 50111 "W365 App Registration"
     procedure ResolveForDomain(HomeDomain: Text): Boolean
     var
         AppReg: Record "W365 App Registration";
-        NoRegistrationErr: Label 'No App Registration found for domain %1 and no default registration is configured. Open App Registrations from the Email Account page to add one.', Comment = '%1 = email domain';
+        NoRegistrationErr: Label 'No App Registration found for domain %1. Open App Registrations from the Email Account page and add one with Domain Filter set to %1.', Comment = '%1 = email domain';
     begin
-        // Try domain-specific match first
-        if HomeDomain <> '' then begin
-            AppReg.SetRange("Domain Filter", HomeDomain);
-            if AppReg.FindFirst() then begin
-                Rec := AppReg;
-                exit(true);
-            end;
-        end;
+        if HomeDomain = '' then
+            exit(false);
 
-        // Fall back to default
-        AppReg.Reset();
-        AppReg.SetRange("Is Default", true);
+        AppReg.SetRange("Domain Filter", HomeDomain);
         if AppReg.FindFirst() then begin
             Rec := AppReg;
             exit(true);
