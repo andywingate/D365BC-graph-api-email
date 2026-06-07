@@ -5,6 +5,16 @@
 
 An AL extension for Microsoft Dynamics 365 Business Central that lets every user - guest or member - send email from their own work address via the Microsoft Graph API (`Mail.Send`), with zero per-user configuration by admins.
 
+## Dependencies
+
+This extension has a hard dependency on **Rest Client OAuth** by Arend-Jan Kauffmann. Both apps must be installed in BC for this extension to function.
+
+| **App** | **Publisher** | **Source** |
+|---|---|---|
+| Rest Client OAuth | AJ Kauffmann | [ajkauffmann/RestClientOAuth](https://github.com/ajkauffmann/RestClientOAuth) |
+
+The `Rest Client OAuth` library provides the OAuth 2.0 Client Credentials flow, in-memory token handling (`SecretText` only, no persistent storage), and the `Rest Client` wrapper used for all Graph API calls. The dependency is declared in `app.json` and BC will require both PTEs to be deployed together.
+
 ## The Problem
 
 Business Central's built-in email connectors do not work cleanly in multi-tenant scenarios:
