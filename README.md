@@ -19,10 +19,11 @@ The `Rest Client OAuth` library provides the OAuth 2.0 Client Credentials flow, 
 
 Business Central's built-in email connectors do not work cleanly in multi-tenant scenarios:
 
-- **"Current User"** (built-in) - works only for accounts native to the BC host tenant. Entra B2B guest users have a cross-tenant identity; BC cannot obtain a `Mail.Send` token for them using this connector.
-- **Microsoft 365 / SMTP** - sends from a shared mailbox or service account, not from the individual user's own address. For guest users this means either email is not sent at all, or it arrives from a generic address that has no meaning to the recipient.
+- **"Current User"** - works only for accounts native to the BC host tenant. Entra B2B guest users have a cross-tenant identity; BC cannot obtain a `Mail.Send` token for them using this connector.
+- **Microsoft 365** - guest users cannot use this connector because their identity belongs to a different tenancy.
+- **SMTP** - this is often the only viable built-in account choice for guest users, but it comes with two problems: it sends from a separate address or service account rather than the individual's own address. SMTP AUTH is disabled by default in Exchange Online and requires deliberate per-mailbox re-enablement - something Microsoft actively discourages.
 
-The result: guest users in BC either cannot send email, or their email arrives from the wrong address - causing confusion for customers, poor traceability, and broken workflows.
+The result: guest users have no clean path. The Current User and Microsoft 365 connectors are off-limits due to cross-tenancy identity. In a modern workplace where recipients expect email to come from a real person at a real address or on-behalf from a shared M365 mailbox, a generic shared sender breaks trust, makes correspondence untraceable, and is simply not what users or customers expect.
 
 ## The Solution
 
@@ -67,13 +68,13 @@ These two apps are distributed as source. The high-level flow is below; see [QUI
 
 ## Intended use
 
-This extension is designed for BC environments where users belong to multiple home tenants - for example, a business that has invited users from another organisation as Entra B2B guests. It also works where all users share a single home tenant; one App Registration with the Domain Filter set to that tenant's domain covers that case.
+This extension is designed for BC environments where users are a mix of member users (same tenancy as BC) and guest users (member of a different tenancy, added as B2B guest accounts). The app registrations can be recorded for as many external tenancies as required and the home tenancy. Replacing the use the 'current tenancy only' built in 'Current User' email account type.
 
 ### Mixed home-tenancy and B2B guest users
 
-A typical scenario: a business runs BC in their own Entra tenancy (`contoso.onmicrosoft.com`). They also work closely with a supplier or partner organisation and have invited those users into BC as Entra B2B guests (signing in from `supplier.com`). Both groups are active BC users and both need to send email - customer correspondence, statements, notifications - from their own real email address, not from a generic shared account.
+A typical scenario: an organisation runs BC in one Entra tenancy (`tenancy1.com`) but also has users whose identities are homed in a second tenancy (`tenancy2.com`) - added to BC as Entra B2B guests. This is one organisation, one BC environment, but with a multi-tenancy identity landscape. Both groups are active BC users and both need to send email from their own real address, not from a generic shared account.
 
-The setup is a one-time admin task: set **Current User (Microsoft Graph)** as the default email account, then create one App Registration for each home domain. At send time the connector reads the current user's BC identity, decodes their home domain, and routes automatically to the correct App Registration. Internal users send as `user@contoso.onmicrosoft.com`; B2B guests send as `user@supplier.com`. No routing flags, no per-user configuration, no admin action per user.
+The setup is a one-time admin task: set **Current User (Microsoft Graph)** as the default email account, then create one App Registration for each home domain. At send time the connector reads the current user's BC identity, decodes their home domain, and routes automatically to the correct App Registration. Users from tenancy1 send as `user@tenancy1.com`; users from tenancy2 send as `user@tenancy2.com`. No routing flags, no per-user configuration, no admin action per user.
 
 ![Email Accounts - Current User (Microsoft Graph) set as default](docs/images/2026-06-07_10h21_17.png)
 
@@ -82,8 +83,6 @@ The setup is a one-time admin task: set **Current User (Microsoft Graph)** as th
 ![App Registrations - two registrations for two home tenants](docs/images/2026-06-07_10h22_08.png)
 
 *One App Registration per home domain. The Domain Filter on each registration determines which users it applies to. The connector selects the matching registration automatically based on the sending user's home email domain.*
-
-`Mail.Send` only. Reply, inbox retrieval, and folder management are not implemented.
 
 ## Acknowledgements
 
