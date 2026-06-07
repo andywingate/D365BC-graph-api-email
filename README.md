@@ -81,8 +81,21 @@ See [QUICKSTART.md](QUICKSTART.md) for full step-by-step instructions. The short
 
 ## Intended use
 
-This extension is designed for BC environments where users belong to multiple home tenants - for example, a BC tenant hosted by a partner or shared services organisation where end-users sign in from their own company accounts (`user@contoso.com`, `user@fabrikam.com`, etc.). It also works where all users share a single home tenant; one App Registration with the Domain Filter set to that tenant's domain covers that case.
+This extension is designed for BC environments where users belong to multiple home tenants - for example, a business that has invited users from another organisation as Entra B2B guests. It also works where all users share a single home tenant; one App Registration with the Domain Filter set to that tenant's domain covers that case.
 
+### Mixed home-tenancy and B2B guest users
+
+A typical scenario: a business runs BC in their own Entra tenancy (`contoso.onmicrosoft.com`). They also work closely with a supplier or partner organisation and have invited those users into BC as Entra B2B guests (signing in from `supplier.com`). Both groups are active BC users and both need to send email - customer correspondence, statements, notifications - from their own real email address, not from a generic shared account.
+
+The setup is a one-time admin task: set **Current User (Microsoft Graph)** as the default email account, then create one App Registration for each home domain. At send time the connector reads the current user's BC identity, decodes their home domain, and routes automatically to the correct App Registration. Internal users send as `user@contoso.onmicrosoft.com`; B2B guests send as `user@supplier.com`. No routing flags, no per-user configuration, no admin action per user.
+
+![Email Accounts - Current User (Microsoft Graph) set as default](docs/images/2026-06-07_10h21_17.png)
+
+*A single account covers all users. BC resolves the correct sender identity at send time.*
+
+![App Registrations - two registrations for two home tenants](docs/images/2026-06-07_10h22_08.png)
+
+*One App Registration per home domain. The Domain Filter on each registration determines which users it applies to. The connector selects the matching registration automatically based on the sending user's home email domain.*
 `Mail.Send` only. Reply, inbox retrieval, and folder management are not implemented.
 
 ## Known limitations
