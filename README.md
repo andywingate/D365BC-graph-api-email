@@ -32,52 +32,38 @@ A single email account called **Current User (Microsoft Graph)** is registered w
 
 When any email is sent in BC - compose dialog, customer statements, scheduled reports, background jobs, ISV extensions - the connector decodes the current user's identity, routes to the correct App Registration, and calls `POST /v1.0/users/{email}/sendMail` using client credentials with the app's `Mail.Send` application permission (not delegated).
 
-## Architecture
+## How it works
 
 ```
 [BC Email Framework]
        |
-       | default account set once
+       | one account, set as default
        v
-[Current User (Microsoft Graph)]  <-- single fixed-GUID account
+[Current User (Microsoft Graph)]
        |
-       | resolve user home domain from Authentication Email
+       | reads the sender's home email domain
        v
-[W365 App Registration]  <-- matched by Domain Filter (required, unique per registration)
+[App Registration]  <-- matched by Domain Filter (one per tenancy)
        |
-       | Client Credentials (app-only auth, in-memory token cache)
+       | authenticates app-only against that tenancy
        v
-[POST /v1.0/users/{email}/sendMail]  <-- sends as the user's home-tenancy identity
+[POST /v1.0/users/{email}/sendMail]  <-- sends as the user's own address
 ```
 
-### Key components
+1. You register one **Current User (Microsoft Graph)** email account in BC and set it as the default.
+2. You add one **App Registration** in BC for each tenancy you need to send mail from. Each registration holds the Entra App ID, Tenant ID, a Domain Filter (e.g. `contoso.com`), and the client secret.
+3. When a user sends email, the connector reads their home email domain, finds the App Registration whose Domain Filter matches, and sends as that user's own address.
 
-| **Component** | **Purpose** |
-|---|---|
-| `Guest Email Connector` | Implements `Email Connector`, `Email Connector v4`, `Default Email Rate Limit`. `GetAccounts()` returns one fixed-GUID account. `Send()` resolves the user's home domain, selects the App Registration, and calls Graph using Client Credentials. All interactive paths build the OAuth stack fresh inside `[TryFunction]` - no `SingleInstance` codeunit in the call chain. |
-| `App Registration` | Table storing one row per Entra app registration. Fields: Code (PK), Description, App ID, Tenant ID, Domain Filter, Redirect URI, Client Secret Status. Domain Filter is required and must be unique across registrations. Client secret stored in `IsolatedStorage` keyed by App ID (`DataScope::Company`). |
-| `App Registrations` | List page. Entry point for admin setup - opened from the Email Account drill-in. |
-| `App Registration Card` | Card page. Create or edit a single App Registration. Client secret is write-only (masked input, stored encrypted, never displayed). |
-| `Graph Mail Mgt` | Calls `POST /v1.0/users/{email}/sendMail` and `GET /organization` (connection test). Builds the OAuth stack self-contained inside each `[TryFunction]`. |
-| `Graph Session` | `SingleInstance` codeunit. Holds initialised `Rest Client` instances keyed by App Registration code for reuse across calls in one BC session. Used only outside `[TryFunction]` boundaries. |
-
-### Auth model
-
-- Authentication uses the **Client Credentials (app-only)** flow from AJ Kauffmann's `Rest Client OAuth` library. No browser popup, no user interaction, no per-user token storage.
-- Tokens are held in memory by the `Rest Client` instance for the duration of the BC session (typically 1 hour). `W365 Graph Session` (SingleInstance) caches one `Rest Client` per App Registration so tokens are not re-acquired on every send.
-- All interactive code paths (`Send()`, `TrySend()`, `TryPingGraph()`) build the OAuth stack fresh inside a `[TryFunction]` boundary and do not reference `W365 Graph Session`. This prevents the SingleInstance/TryFunction/collectible-error crash described in Lessons Learned.
-- The `Home Email` field on `W365 User Email Token` caches the user's real home email decoded from their BC `Authentication Email`. It is used for the `From` display address in the Email Accounts page and compose dialog. No token data is stored there.
-- The Entra app must have `Mail.Send` granted as an **application permission** with admin consent. Delegated permissions are not used for sending.
+There is no per-user consent, no token to manage, and no admin action per user. Adding a new tenancy is a single App Registration row.
 
 ## Setup
 
-See [QUICKSTART.md](QUICKSTART.md) for full step-by-step instructions. The short version:
+These two apps are distributed as source. The high-level flow is below; see [QUICKSTART.md](QUICKSTART.md) for full step-by-step instructions.
 
-1. Create one Entra app registration per user home domain, each with `Mail.Send` granted as an **application permission** with admin consent
-2. Deploy this extension to BC
-3. Open **Email Accounts**, find **Current User (Microsoft Graph)**, and click **Set as Default**
-4. Open **App Registrations** from the account card and create one row per Entra app registration, including the Domain Filter (e.g. `contoso.com`) and client secret
-5. Sending is immediate - no per-user action required
+1. **Build and install the apps.** Download the source for this extension and the [Rest Client OAuth](https://github.com/ajkauffmann/RestClientOAuth) dependency, build them as PTEs, and install both in your BC environment.
+2. **Create the Entra app registrations.** In each tenancy you need to send mail from, create an app registration with two **application permissions** granted and admin consent given: `Mail.Send` (to send email) and `Organization.Read.All` (used by the Test Connection check). Note the App ID, Tenant ID, and a client secret.
+3. **Add the email account in BC.** Open **Email Accounts**, choose **New > Set Up Email Account**, and select **Current User (Microsoft Graph)**.
+4. **Enter the App Registration details.** Add one App Registration row per tenancy (App ID, Tenant ID, Domain Filter, client secret), then set the account as default.
 
 ## Intended use
 
@@ -96,6 +82,7 @@ The setup is a one-time admin task: set **Current User (Microsoft Graph)** as th
 ![App Registrations - two registrations for two home tenants](docs/images/2026-06-07_10h22_08.png)
 
 *One App Registration per home domain. The Domain Filter on each registration determines which users it applies to. The connector selects the matching registration automatically based on the sending user's home email domain.*
+
 `Mail.Send` only. Reply, inbox retrieval, and folder management are not implemented.
 
 ## Acknowledgements
