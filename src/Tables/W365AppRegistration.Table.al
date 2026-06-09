@@ -159,15 +159,28 @@ table 50111 "W365 App Registration"
     end;
 
     /// <summary>
-    /// Returns the authority tenant to use in the OAuth URL.
-    /// For Client Credentials, this must be a specific tenant.
+    /// Returns the authority tenant to use in the OAuth URL for Client Credentials.
+    /// Used by the Shared Mailbox connector. Requires a specific tenant GUID.
     /// </summary>
     procedure GetAuthorityTenant(): Text
     var
-        TenantRequiredErr: Label 'Tenant ID is required for Client Credentials authentication.';
+        TenantRequiredErr: Label 'Tenant ID is required for Client Credentials authentication (Shared Mailbox connector). Enter the directory tenant GUID on this App Registration.';
     begin
         if Rec."Tenant ID" = '' then
             Error(TenantRequiredErr);
+
+        exit(Rec."Tenant ID");
+    end;
+
+    /// <summary>
+    /// Returns the authority tenant to use for the Authorization Code Grant (delegated) flow.
+    /// Returns 'common' when Tenant ID is blank, enabling multi-tenant / B2B guest sign-in.
+    /// Set Tenant ID to a specific GUID to restrict sign-in to a single home tenant.
+    /// </summary>
+    procedure GetDelegatedTenant(): Text
+    begin
+        if Rec."Tenant ID" = '' then
+            exit('common');
 
         exit(Rec."Tenant ID");
     end;

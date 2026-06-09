@@ -117,15 +117,15 @@ page 50113 "W365 App Registration Card"
             action(TestConnection)
             {
                 ApplicationArea = All;
-                Caption = 'Test Connection';
+                Caption = 'Test Connection (Shared Mailbox)';
                 Image = TestReport;
-                ToolTip = 'Verifies that the App ID, Tenant ID, and Client Secret are valid by acquiring a token and calling Microsoft Graph.';
+                ToolTip = 'Verifies that the App ID, Tenant ID, and Client Secret are valid for the Client Credentials (app-only) flow used by the Shared Mailbox connector. Not applicable to the Guest Email connector, which uses delegated sign-in on first send.';
 
                 trigger OnAction()
                 var
                     GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
                     ErrorText: Text;
-                    SuccessMsg: Label 'Connection successful. Microsoft Graph authenticated correctly using the Client Credentials flow.';
+                    SuccessMsg: Label 'Connection successful. Microsoft Graph authenticated correctly using the Client Credentials flow (app-only). This confirms setup for the Shared Mailbox connector.';
                     FailMsg: Label 'Connection failed: %1';
                 begin
                     if GraphMailMgt.TestAppRegConnection(Rec."Code", ErrorText) then

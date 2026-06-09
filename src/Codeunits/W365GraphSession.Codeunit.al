@@ -6,10 +6,13 @@ using Microsoft.Identity.Client;
 
 /// <summary>
 /// SingleInstance codeunit that holds initialised Rest Client instances for the BC session.
-/// Uses the Client Credentials (app-only) OAuth flow - runs fully server-side, no browser
-/// interaction required. The App Registration must have Mail.Send application permission
-/// granted in Azure. Tokens are cached in-memory by the RestClientOAuth library for the
-/// duration of their lifetime (typically 1 hour).
+/// Supports two OAuth flows:
+///   - Client Credentials (app-only): used by the Shared Mailbox connector. Requires Mail.Send
+///     APPLICATION permission in Azure and a specific Tenant ID. Fully server-side.
+///   - Authorization Code Grant with PKCE (delegated): used by the Guest Email connector.
+///     Requires Mail.Send DELEGATED permission in Azure. Triggers an interactive browser
+///     sign-in popup on first use; subsequent calls within the session use the cached token.
+/// All tokens are held in-memory only (SecretText). No persistent token storage.
 /// </summary>
 codeunit 50114 "W365 Graph Session"
 {
@@ -18,10 +21,12 @@ codeunit 50114 "W365 Graph Session"
 
     var
         RestClients: Dictionary of [Code[20], Codeunit "Rest Client"];
+        GuestRestClients: Dictionary of [Code[20], Codeunit "Rest Client"];
 
     /// <summary>
-    /// Returns an initialised Rest Client for the given App Registration.
-    /// Initialises a new one if this is the first call in the session for that registration.
+    /// Returns an initialised Rest Client for the given App Registration using Client Credentials.
+    /// Used by the Shared Mailbox connector. Initialises a new client if this is the first call
+    /// in the session for that registration.
     /// </summary>
     procedure GetRestClient(AppRegCode: Code[20]; var Client: Codeunit "Rest Client")
     var
@@ -84,11 +89,103 @@ codeunit 50114 "W365 Graph Session"
     end;
 
     /// <summary>
-    /// Clears all cached Rest Client instances for the session.
+    /// Clears all cached Client Credentials Rest Client instances for the session.
     /// </summary>
     procedure ClearAllSessions()
     begin
         Clear(RestClients);
+    end;
+
+    /// <summary>
+    /// Returns a Rest Client for the given App Registration using Authorization Code Grant (delegated).
+    /// Used by the Guest Email connector. If a client with cached token state exists in the session
+    /// it is returned directly; otherwise a new client is built (no token acquisition at this stage).
+    /// Token acquisition (interactive sign-in popup) happens lazily when the client makes its first
+    /// HTTP call inside TrySend(). Subsequent calls within the session reuse the cached token,
+    /// with silent refresh when the access token expires.
+    /// </summary>
+    procedure GetOrBuildGuestRestClient(AppRegCode: Code[20]; var Client: Codeunit "Rest Client")
+    var
+        AppReg: Record "W365 App Registration";
+        OAuthClientApp: Codeunit "OAuth Client Application KFM";
+        MicrosoftEntraID: Codeunit "Microsoft Entra ID KFM";
+        AuthCodeFlow: Codeunit "Auth. Code Grant Flow KFM";
+        HttpAuthOAuth2: Codeunit "Http Authentication OAuth2 KFM";
+        OAuthAuthority: Interface "OAuth Authority KFM";
+        OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
+        HttpAuthentication: Interface "Http Authentication";
+        NewClient: Codeunit "Rest Client";
+        ClientSecret: Text;
+        ClientSecretAsSecret: SecretText;
+        NoSecretErr: Label 'No client secret is configured for App Registration %1. Open App Registrations from the Email Account page and set the client secret.', Comment = '%1 = App Registration code';
+    begin
+        // Return cached client (with any previously acquired token state) if available.
+        if GuestRestClients.ContainsKey(AppRegCode) then begin
+            GuestRestClients.Get(AppRegCode, Client);
+            exit;
+        end;
+
+        if not AppReg.Get(AppRegCode) then
+            Error('App Registration %1 not found.', AppRegCode);
+
+        if not AppReg.GetClientSecret(ClientSecret) then
+            Error(NoSecretErr, AppRegCode);
+
+        // Build OAuth Client Application with delegated Mail.Send scope.
+        // offline_access is automatically appended by Auth. Code Grant Flow KFM to enable refresh tokens.
+        OAuthClientApp.SetClientId(AppReg."App ID");
+        ClientSecretAsSecret := ClientSecret;
+        OAuthClientApp.SetClientSecret(ClientSecretAsSecret);
+        OAuthClientApp.AddScope('https://graph.microsoft.com/Mail.Send');
+
+        // Use 'common' for multi-tenant / B2B guest sign-in unless a specific tenant is configured.
+        MicrosoftEntraID.SetTenantID(AppReg.GetDelegatedTenant());
+        OAuthAuthority := MicrosoftEntraID;
+
+        // Authorization Code Grant flow with PKCE (S256). Interactive sign-in popup is triggered
+        // lazily on the first HTTP call (inside TrySend, not here). PromptInteraction defaults to
+        // None which allows silent re-auth when a cached token exists.
+        AuthCodeFlow.SetAuthority(OAuthAuthority);
+        OAuthAuthorizationFlow := AuthCodeFlow;
+
+        HttpAuthOAuth2.Initialize(OAuthClientApp, OAuthAuthorizationFlow);
+        HttpAuthentication := HttpAuthOAuth2;
+        NewClient.Initialize(HttpAuthentication);
+
+        GuestRestClients.Add(AppRegCode, NewClient);
+        Client := NewClient;
+    end;
+
+    /// <summary>
+    /// Stores an updated Guest Rest Client (with refreshed token state) back into the session cache.
+    /// Call after a successful send so that the refreshed access and refresh tokens are preserved
+    /// for the next send in this session.
+    /// </summary>
+    procedure UpdateGuestRestClient(AppRegCode: Code[20]; Client: Codeunit "Rest Client")
+    begin
+        if GuestRestClients.ContainsKey(AppRegCode) then
+            GuestRestClients.Set(AppRegCode, Client)
+        else
+            GuestRestClients.Add(AppRegCode, Client);
+    end;
+
+    /// <summary>
+    /// Removes the cached Auth Code Grant Rest Client for the given App Registration.
+    /// Forces re-authentication (interactive sign-in popup) on the next send for this registration.
+    /// </summary>
+    procedure ClearGuestSession(AppRegCode: Code[20])
+    begin
+        if GuestRestClients.ContainsKey(AppRegCode) then
+            GuestRestClients.Remove(AppRegCode);
+    end;
+
+    /// <summary>
+    /// Clears all cached Auth Code Grant Rest Client instances for the session.
+    /// Forces re-authentication on the next send for all App Registrations.
+    /// </summary>
+    procedure ClearAllGuestSessions()
+    begin
+        Clear(GuestRestClients);
     end;
 
     /// <summary>

@@ -4,7 +4,7 @@
   "publisher": "Wingate365",
   "version": "2.0.0.0",
   "brief": "B2B guest and member users send email from BC using their own work address via Microsoft Graph.",
-  "description": "Open-source per-tenant extension. Guest and member users send email from their real home-tenancy identity using Microsoft Graph Client Credentials flow. No per-user consent or token management required. Supports multiple home tenants via domain-matched App Registrations. Also supports shared mailboxes. Depends on Rest Client OAuth by AJ Kauffmann.",
+  "description": "Open-source per-tenant extension. Guest and member users send email from their real home-tenancy identity using Microsoft Graph Authorization Code Grant (PKCE S256, delegated Mail.Send). Interactive sign-in popup on first use per session; silent token refresh thereafter. Supports multiple home tenants via domain-matched App Registrations. Also supports shared mailboxes via Client Credentials. Depends on Rest Client OAuth by AJ Kauffmann.",
   "privacyStatement": "",
   "EULA": "",
   "help": "",
