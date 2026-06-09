@@ -14,22 +14,27 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     // =========================================================================
 
     /// <summary>
-    /// Sends an email via Microsoft Graph using application credentials and the current user's resolved home address.
+    /// Sends an email via Microsoft Graph using the Authorization Code Grant (delegated) flow
+    /// and the current user's resolved home address. On the first send in a BC session an
+    /// interactive sign-in popup is shown so the user consents to Mail.Send on their behalf.
+    /// Subsequent sends in the same session use the cached delegated token silently.
     /// Called by BC's Email module when sending any email assigned to this connector.
     /// </summary>
     procedure Send(EmailMessage: Codeunit "Email Message"; AccountId: Guid)
     var
         AppReg: Record "W365 App Registration";
+        GraphSession: Codeunit "W365 Graph Session";
         User: Record User;
+        Client: Codeunit "Rest Client";
         Recipients: List of [Text];
         SenderUPN: Text;
         HomeDomain: Text;
         GraphEndpoint: Text;
+        ErrorText: Text;
         GraphEndpointTpl: Label 'https://graph.microsoft.com/v1.0/users/%1/sendMail', Locked = true;
         NoRecipientsErr: Label 'The email message has no recipients.';
         NoAppRegErr: Label 'No App Registration found for your account. Contact your administrator.';
         NoUPNErr: Label 'Your account does not have an Authentication Email address configured in Business Central. Contact your administrator.';
-        ErrorText: Text;
     begin
         EmailMessage.GetRecipients(Enum::"Email Recipient Type"::"To", Recipients);
         if Recipients.Count() = 0 then
@@ -41,55 +46,38 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
         if SenderUPN = '' then
             Error(NoUPNErr);
 
-        // Resolve App Registration directly from table - no SingleInstance codeunit
+        // Resolve App Registration directly from table - no SingleInstance codeunit in this
+        // error path so any exception is properly propagated to the caller.
         HomeDomain := ResolveDomainFromEmail(User."Authentication Email");
         if not AppReg.ResolveForDomain(HomeDomain) then
             Error(NoAppRegErr);
 
         GraphEndpoint := StrSubstNo(GraphEndpointTpl, SenderUPN);
 
-        if not TrySend(EmailMessage, AppReg."Code", GraphEndpoint) then begin
+        // Build or retrieve the Auth Code Grant Rest Client from the session cache.
+        // This only sets up credentials - no HTTP calls or sign-in popup happen here.
+        // The popup (if needed) fires lazily inside TrySend() when the first HTTP call is made.
+        GraphSession.GetOrBuildGuestRestClient(AppReg."Code", Client);
+
+        if not TrySend(EmailMessage, GraphEndpoint, Client) then begin
             ErrorText := GetLastErrorText();
             Error('Failed to send email via Microsoft Graph: %1', ErrorText);
         end;
+
+        // After a successful send, write the updated client (with any refreshed token state)
+        // back into the session cache so the next send in this session can reuse the token.
+        GraphSession.UpdateGuestRestClient(AppReg."Code", Client);
     end;
 
     [TryFunction]
-    local procedure TrySend(var EmailMessage: Codeunit "Email Message"; AppRegCode: Code[20]; GraphEndpoint: Text)
+    local procedure TrySend(var EmailMessage: Codeunit "Email Message"; GraphEndpoint: Text; var Client: Codeunit "Rest Client")
     var
         GraphMailMgt: Codeunit "W365 Graph Mail Mgt";
-        AppReg: Record "W365 App Registration";
-        OAuthClientApp: Codeunit "OAuth Client Application KFM";
-        MicrosoftEntraID: Codeunit "Microsoft Entra ID KFM";
-        ClientCredFlow: Codeunit "Client Credentials Flow KFM";
-        HttpAuthOAuth2: Codeunit "Http Authentication OAuth2 KFM";
-        OAuthAuthority: Interface "OAuth Authority KFM";
-        OAuthAuthorizationFlow: Interface "OAuth Authorization Flow KFM";
-        HttpAuthentication: Interface "Http Authentication";
-        Client: Codeunit "Rest Client";
-        ClientSecret: Text;
-        ClientSecretAsSecret: SecretText;
-        NoSecretErr: Label 'No client secret is configured for App Registration %1.', Comment = '%1 = App Registration code';
     begin
-        // Build OAuth stack fresh inside TryFunction - no SingleInstance codeunit in this
-        // error path so any exception (including HTTP consent dialogs) is properly caught.
-        if not AppReg.Get(AppRegCode) then
-            Error('App Registration %1 not found.', AppRegCode);
-        if not AppReg.GetClientSecret(ClientSecret) then
-            Error(NoSecretErr, AppRegCode);
-
-        OAuthClientApp.SetClientId(AppReg."App ID");
-        ClientSecretAsSecret := ClientSecret;
-        OAuthClientApp.SetClientSecret(ClientSecretAsSecret);
-        OAuthClientApp.AddScope('https://graph.microsoft.com/.default');
-        MicrosoftEntraID.SetTenantID(AppReg.GetAuthorityTenant());
-        OAuthAuthority := MicrosoftEntraID;
-        ClientCredFlow.SetAuthority(OAuthAuthority);
-        OAuthAuthorizationFlow := ClientCredFlow;
-        HttpAuthOAuth2.Initialize(OAuthClientApp, OAuthAuthorizationFlow);
-        HttpAuthentication := HttpAuthOAuth2;
-        Client.Initialize(HttpAuthentication);
-
+        // W365 Graph Session (SingleInstance) is NOT on the call stack here - only the
+        // pre-built Client is passed in as a value. Any exception thrown during token
+        // acquisition (sign-in popup) or the Graph HTTP call is caught by [TryFunction]
+        // without risk of corrupting the SingleInstance session state.
         GraphMailMgt.SendEmailMessage(EmailMessage, GraphEndpoint, Client);
     end;
 
@@ -262,7 +250,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     /// </summary>
     procedure GetDescription(): Text[250]
     begin
-        exit('Send emails from Business Central via Microsoft Graph using each user''s own sign-in account. Ideal for B2B guest users or other multi-tenancy deployments.');
+        exit('Send emails from Business Central via Microsoft Graph using each user''s own delegated sign-in (Authorization Code Grant). Ideal for B2B guest users or other multi-tenancy deployments. Requires delegated Mail.Send permission.');
     end;
 
     // =========================================================================
@@ -298,7 +286,7 @@ codeunit 50110 "W365 Guest Email Connector" implements "Email Connector", "Email
     // =========================================================================
 
     /// <summary>
-    /// Graph Mail.Send application permission has no strict per-connector rate limit we need to enforce.
+    /// Graph Mail.Send delegated permission has no strict per-connector rate limit we need to enforce.
     /// Returning 0 means no limit imposed by this connector.
     /// </summary>
     procedure GetDefaultEmailRateLimit(): Integer

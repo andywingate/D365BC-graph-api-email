@@ -13,9 +13,11 @@ codeunit 50105 "W365 Graph Mail Mgt"
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Tests the App Registration credentials by acquiring a token and calling
-    /// GET /organization. Safe to call from page actions - error is caught and
-    /// returned in ErrorText rather than crashing the session.
+    /// Tests the App Registration credentials for the Client Credentials (app-only) flow.
+    /// Used by the Shared Mailbox connector and the App Registration Card "Test Connection" action.
+    /// Not applicable to the Guest Email connector, which uses delegated Auth Code Grant instead.
+    /// Safe to call from page actions - error is caught and returned in ErrorText rather than
+    /// crashing the session.
     /// </summary>
     procedure TestAppRegConnection(AppRegCode: Code[20]; var ErrorText: Text): Boolean
     var
@@ -51,6 +53,7 @@ codeunit 50105 "W365 Graph Mail Mgt"
         OrgEndpoint: Label 'https://graph.microsoft.com/v1.0/organization?$select=id', Locked = true;
         NoSecretErr: Label 'No client secret is configured for App Registration %1. Open the App Registration and set the client secret.', Comment = '%1 = App Registration code';
     begin
+        // Client Credentials flow - used for Shared Mailbox connection testing only.
         // Build the OAuth stack fresh - no SingleInstance codeunit in this error path
         // so any exception thrown by the OAuth library is properly caught by [TryFunction].
         if not AppReg.Get(AppRegCode) then
@@ -72,6 +75,12 @@ codeunit 50105 "W365 Graph Mail Mgt"
         HttpResponseMessage := PingClient.Get(OrgEndpoint);
     end;
 
+    /// <summary>
+    /// Returns the current user's email address from Microsoft Graph /me.
+    /// This method is retained for backward compatibility but is no longer called
+    /// by the main send paths, which resolve the user email from the BC Authentication
+    /// Email field directly without a Graph call.
+    /// </summary>
     procedure GetCurrentUserEmail(): Text
     var
         GraphSession: Codeunit "W365 Graph Session";
